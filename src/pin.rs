@@ -1,6 +1,5 @@
 use std::path::PathBuf;
 
-
 pub struct Pin {
     name: String,
     path: PathBuf,

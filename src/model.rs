@@ -1,5 +1,3 @@
-use crate::tab::Tab;
-
 pub struct JujikModel {}
 
 impl JujikModel {

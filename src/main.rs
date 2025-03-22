@@ -1,9 +1,27 @@
-use eframe::{run_native, NativeOptions};
-use jujik::jujik::Jujik;
+use eframe::{NativeOptions, run_native};
+use jujik::{error::CustomError, jujik::Jujik};
+use log::LevelFilter;
+use simplelog::{ColorChoice, CombinedLogger, Config, TermLogger, TerminalMode, WriteLogger};
+use std::fs::File;
 
-fn main() {
+fn main() -> Result<(), CustomError> {
+    CombinedLogger::init(vec![
+        TermLogger::new(
+            LevelFilter::Info,
+            Config::default(),
+            TerminalMode::Mixed,
+            ColorChoice::Auto,
+        ),
+        WriteLogger::new(
+            LevelFilter::Debug,
+            Config::default(),
+            File::create("log.log")?,
+        ),
+    ])?;
+
     let jujik = Jujik::new();
 
     let native_options = NativeOptions::default();
-    let _ = run_native("Jujik", native_options, Box::new(|cc| Ok(Box::new(jujik))));
+    run_native("Jujik", native_options, Box::new(|_cc| Ok(Box::new(jujik))))?;
+    Ok(())
 }

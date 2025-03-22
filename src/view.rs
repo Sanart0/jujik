@@ -1,4 +1,4 @@
-use egui::{menu, CentralPanel, ScrollArea, SidePanel, TopBottomPanel};
+use egui::{CentralPanel, ScrollArea, SidePanel, TopBottomPanel, menu};
 
 use crate::{pin::Pin, tab::Tab};
 

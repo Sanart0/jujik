@@ -5,25 +5,11 @@ pub struct Entity {
     name: String,
     extansion: Option<String>,
     kind: u8,
-    rules: (u8, u8, u8),
+    rules: u32,
     entitys: Vec<Entity>,
 }
 
 impl Entity {
-    pub fn new(path_buf: PathBuf) -> Entity {
-        let path = path_buf.as_path();
-
-        Self {
-            global_path: Self::get_global_path(path),
-            name: Self::get_name(path),
-            extansion: Self::get_extansion(path),
-            kind: todo!(),
-            rules: todo!(),
-            entitys: todo!(),
-        }
-
-    }
-
     fn get_global_path(path: &Path) -> String {
         if let Some(parent) = path.parent() {
             if let Some(parent) = parent.to_str() {
@@ -58,6 +44,29 @@ impl Entity {
         } else {
             //TODO Handle error
             None
+        }
+    }
+
+    fn get_kind(path: &Path) -> u8 {
+        0
+    }
+
+    fn get_permissions(path: &Path) -> u32 {
+        0
+    }
+}
+
+impl Entity {
+    pub fn new(path_buf: PathBuf) -> Entity {
+        let path = path_buf.as_path();
+
+        Self {
+            global_path: Self::get_global_path(path),
+            name: Self::get_name(path),
+            extansion: Self::get_extansion(path),
+            kind: todo!(),
+            rules: todo!(),
+            entitys: todo!(),
         }
     }
 }

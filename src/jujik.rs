@@ -1,8 +1,5 @@
-pub mod model;
-pub mod view;
-
+use crate::view::JujikView;
 use eframe::App;
-use view::JujikView;
 
 pub struct Jujik {
     view: JujikView,

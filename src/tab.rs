@@ -5,5 +5,5 @@ use crate::entity::Entity;
 pub struct Tab {
     name: String,
     path: PathBuf,
-    entity: Vec<Entity>
+    entity: Vec<Entity>,
 }
