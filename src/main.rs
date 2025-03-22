@@ -1,5 +1,5 @@
 use eframe::{NativeOptions, run_native};
-use jujik::{error::CustomError, jujik::Jujik};
+use jujik::{error::CustomError, controller::Jujik};
 use log::LevelFilter;
 use simplelog::{ColorChoice, CombinedLogger, Config, TermLogger, TerminalMode, WriteLogger};
 use std::fs::File;
