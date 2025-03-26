@@ -1,20 +1,14 @@
-use crate::view::JujikView;
-use eframe::App;
+use crate::error::CustomError;
+use std::thread::{self, JoinHandle};
 
-pub struct Jujik {
-    view: JujikView,
-}
+pub struct Jujik {}
 
 impl Jujik {
     pub fn new() -> Self {
-        Self {
-            view: JujikView::default(),
-        }
+        Self {}
     }
-}
 
-impl App for Jujik {
-    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
-        self.view.update(ctx, frame);
+    pub fn run(self) -> JoinHandle<Result<(), CustomError>> {
+        thread::spawn(|| -> Result<(), CustomError> { Ok(()) })
     }
 }

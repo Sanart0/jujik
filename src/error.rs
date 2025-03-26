@@ -41,3 +41,5 @@ impl Debug for CustomError {
         )
     }
 }
+
+unsafe impl Send for CustomError {}

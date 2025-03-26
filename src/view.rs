@@ -1,6 +1,7 @@
+use crate::{error::CustomError, pin::Pin, tab::Tab};
+use eframe::{App, NativeOptions, run_native};
 use egui::{CentralPanel, ScrollArea, SidePanel, TopBottomPanel, menu};
-
-use crate::{pin::Pin, tab::Tab};
+use std::thread::{self, JoinHandle};
 
 #[derive(Default)]
 pub struct JujikView {
@@ -9,7 +10,24 @@ pub struct JujikView {
 }
 
 impl JujikView {
-    pub fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+    pub fn new() -> Self {
+        Self {
+            pins: Vec::new(),
+            tabs: Vec::new(),
+        }
+    }
+
+    pub fn run(self) -> JoinHandle<Result<(), CustomError>> {
+        thread::spawn(|| -> Result<(), CustomError> {
+            let native_options = NativeOptions::default();
+            run_native("Jujik", native_options, Box::new(|_cc| Ok(Box::new(self))))?;
+            Ok(())
+        })
+    }
+}
+
+impl App for JujikView {
+    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         TopBottomPanel::top("menu").show(ctx, |ui| {
             menu::bar(ui, |ui| {
                 ui.menu_button("File", |ui| {
@@ -85,5 +103,7 @@ impl JujikView {
                 // }
             });
         });
+
+        ctx.request_repaint();
     }
 }

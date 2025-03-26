@@ -1,5 +1,4 @@
-use eframe::{NativeOptions, run_native};
-use jujik::{error::CustomError, controller::Jujik};
+use jujik::{controller::Jujik, error::CustomError};
 use log::LevelFilter;
 use simplelog::{ColorChoice, CombinedLogger, Config, TermLogger, TerminalMode, WriteLogger};
 use std::fs::File;
@@ -21,7 +20,5 @@ fn main() -> Result<(), CustomError> {
 
     let jujik = Jujik::new();
 
-    let native_options = NativeOptions::default();
-    run_native("Jujik", native_options, Box::new(|_cc| Ok(Box::new(jujik))))?;
     Ok(())
 }

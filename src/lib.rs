@@ -1,8 +1,8 @@
-pub mod controller;
-pub mod model;
-pub mod view;
 pub mod commands;
-pub mod error;
+pub mod controller;
 pub mod entity;
+pub mod error;
+pub mod model;
 pub mod pin;
 pub mod tab;
+pub mod view;
