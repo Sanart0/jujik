@@ -1,9 +1,10 @@
-use std::fmt::Debug;
+use std::{any::Any, fmt::Debug};
 
 pub enum CustomError {
     IO(std::io::Error),
     EFrame(eframe::Error),
     Logger(log::SetLoggerError),
+    Thread(Box<dyn Any + Send>),
     Other(String),
 }
 
@@ -27,16 +28,23 @@ impl From<log::SetLoggerError> for CustomError {
     }
 }
 
+impl From<Box<dyn Any + Send>> for CustomError {
+    fn from(value: Box<dyn Any + Send>) -> Self {
+        CustomError::Thread(value)
+    }
+}
+
 impl Debug for CustomError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
             "{}",
             match self {
-                CustomError::IO(error) => error.to_string(),
-                CustomError::EFrame(error) => error.to_string(),
-                CustomError::Logger(error) => error.to_string(),
-                CustomError::Other(error) => error.to_string(),
+                CustomError::IO(e) => e.to_string(),
+                CustomError::EFrame(e) => e.to_string(),
+                CustomError::Logger(e) => e.to_string(),
+                CustomError::Thread(e) => format!("{:?}", e),
+                CustomError::Other(e) => e.to_string(),
             }
         )
     }
