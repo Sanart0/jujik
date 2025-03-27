@@ -1,6 +1,7 @@
 use crate::{error::CustomError, pin::Pin, tab::Tab};
-use eframe::{App, NativeOptions, run_native};
+use eframe::{run_native, App, EventLoopBuilderHook, NativeOptions};
 use egui::{CentralPanel, ScrollArea, SidePanel, TopBottomPanel, menu};
+use winit::platform::wayland::EventLoopBuilderExtWayland;
 use std::thread::{self, JoinHandle};
 
 #[derive(Default)]
@@ -19,7 +20,13 @@ impl JujikView {
 
     pub fn run(self) -> JoinHandle<Result<(), CustomError>> {
         thread::spawn(|| -> Result<(), CustomError> {
-            let native_options = NativeOptions::default();
+            let event_loop_builder: Option<EventLoopBuilderHook> = Some(Box::new(|event_loop_builder| {
+                event_loop_builder.with_any_thread(true);
+            }));
+            let native_options = NativeOptions {
+                event_loop_builder,
+                ..Default::default()
+            };
             run_native("Jujik", native_options, Box::new(|_cc| Ok(Box::new(self))))?;
             Ok(())
         })
