@@ -33,18 +33,9 @@ fn main() -> Result<(), CustomError> {
     let model_handler = model.run();
     let view_handler = view.run();
 
-    let jujik_handlers = vec![view_handler, model_handler, controller_handler];
-
-    for handler in jujik_handlers {
-        match handler.join() {
-            Ok(thread_return) => {
-                if let Err(err) = thread_return {
-                    Err(err)?;
-                }
-            }
-            Err(err) => Err(CustomError::Thread(err))?,
-        }
-    }
+    controller_handler.join()??;
+    model_handler.join()??;
+    view_handler.join()??;
 
     Ok(())
 }

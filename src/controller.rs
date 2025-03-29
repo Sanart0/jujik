@@ -1,7 +1,7 @@
 use crate::{commands::Command, error::CustomError};
 use std::{
-    path::{Path, PathBuf},
-    sync::mpsc::{self, Receiver, Sender},
+    path::Path,
+    sync::mpsc::{Receiver, Sender},
     thread::{self, JoinHandle},
 };
 
@@ -27,33 +27,26 @@ impl JujikController {
     pub fn run(self) -> JoinHandle<Result<(), CustomError>> {
         thread::spawn(move || -> Result<(), CustomError> {
             'event_loop: loop {
-                let mut command = Command::Empty;
-                if let Ok(value) = self.controller.recv() {
-                    command = value
-                };
+                if let Ok(command) = self.controller.try_recv() {
+                    println!("{:?}", command);
 
-                println!("{:?}", command);
-
-                match command {
-                    Command::NewPin(path_str) => {
-                        let mut path = Path::new(&path_str);
-                        if path.exists() && !path.is_dir() {
-                            if let Some(parent) = path.parent() {
-                                path = parent;
+                    match command {
+                        Command::NewPin(path_str) => {
+                            let mut path = Path::new(&path_str);
+                            if path.exists() && !path.is_dir() {
+                                if let Some(parent) = path.parent() {
+                                    path = parent;
+                                }
                             }
                         }
-                        println!("{:?}", path);
+                        Command::Drop => {
+                            self.view.send(Command::Drop)?;
+                            self.model.send(Command::Drop)?;
+                            break 'event_loop;
+                        }
+                        _ => {}
                     }
-                    Command::CreatePin(path_buf) => {}
-                    Command::ShowPin(pin) => {}
-                    Command::ErrorPin(err) => {}
-                    Command::Drop => {
-                        self.view.send(Command::Drop)?;
-                        self.model.send(Command::Drop)?;
-                        break 'event_loop;
-                    }
-                    Command::Empty => {}
-                }
+                };
 
                 std::thread::sleep(std::time::Duration::from_millis(10));
             }

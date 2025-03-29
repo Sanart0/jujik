@@ -3,7 +3,6 @@ use std::{fmt::Debug, path::PathBuf};
 
 #[derive(Debug)]
 pub enum Command {
-    Empty,
     Drop,
 
     // Pin

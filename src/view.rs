@@ -1,8 +1,9 @@
 use crate::{commands::Command, error::CustomError, pin::Pin, tab::Tab};
 use eframe::{App, EventLoopBuilderHook, NativeOptions, run_native};
 use egui::{CentralPanel, ScrollArea, SidePanel, TopBottomPanel, menu};
+use std::sync::mpsc::Sender;
 use std::{
-    sync::mpsc::{Receiver, Sender},
+    sync::mpsc::Receiver,
     thread::{self, JoinHandle},
 };
 use winit::platform::wayland::EventLoopBuilderExtWayland;
@@ -47,15 +48,18 @@ impl App for JujikView {
                 ui.menu_button("File", |ui| {
                     if ui.button("Exit").clicked() {
                         std::process::exit(0);
+                        
                     }
                 });
                 if ui.button("Create Root").clicked() {
+                    println!("SHOULD A ROOT");
                     let _ = self
                         .controller
                         .send(Command::NewPin("/".to_string()))
                         .inspect_err(CustomError::handle_err);
                 }
                 if ui.button("Create Home").clicked() {
+                    println!("SHOULD A HOME");
                     let _ = self
                         .controller
                         .send(Command::NewPin("/home/sanart0/".to_string()))
