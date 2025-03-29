@@ -1,18 +1,24 @@
-use crate::{error::CustomError, pin::Pin, tab::Tab};
-use eframe::{run_native, App, EventLoopBuilderHook, NativeOptions};
+use crate::{commands::Command, error::CustomError, pin::Pin, tab::Tab};
+use eframe::{App, EventLoopBuilderHook, NativeOptions, run_native};
 use egui::{CentralPanel, ScrollArea, SidePanel, TopBottomPanel, menu};
+use std::{
+    sync::mpsc::{Receiver, Sender},
+    thread::{self, JoinHandle},
+};
 use winit::platform::wayland::EventLoopBuilderExtWayland;
-use std::thread::{self, JoinHandle};
 
-#[derive(Default)]
 pub struct JujikView {
+    controller: Sender<Command>,
+    view: Receiver<Command>,
     pins: Vec<Pin>,
     tabs: Vec<Tab>,
 }
 
 impl JujikView {
-    pub fn new() -> Self {
+    pub fn new(controller: Sender<Command>, view: Receiver<Command>) -> Self {
         Self {
+            controller,
+            view,
             pins: Vec::new(),
             tabs: Vec::new(),
         }
@@ -20,9 +26,10 @@ impl JujikView {
 
     pub fn run(self) -> JoinHandle<Result<(), CustomError>> {
         thread::spawn(|| -> Result<(), CustomError> {
-            let event_loop_builder: Option<EventLoopBuilderHook> = Some(Box::new(|event_loop_builder| {
-                event_loop_builder.with_any_thread(true);
-            }));
+            let event_loop_builder: Option<EventLoopBuilderHook> =
+                Some(Box::new(|event_loop_builder| {
+                    event_loop_builder.with_any_thread(true);
+                }));
             let native_options = NativeOptions {
                 event_loop_builder,
                 ..Default::default()
@@ -42,6 +49,18 @@ impl App for JujikView {
                         std::process::exit(0);
                     }
                 });
+                if ui.button("Create Root").clicked() {
+                    let _ = self
+                        .controller
+                        .send(Command::NewPin("/".to_string()))
+                        .inspect_err(CustomError::handle_err);
+                }
+                if ui.button("Create Home").clicked() {
+                    let _ = self
+                        .controller
+                        .send(Command::NewPin("/home/sanart0/".to_string()))
+                        .inspect_err(CustomError::handle_err);
+                }
             });
         });
 
@@ -112,5 +131,12 @@ impl App for JujikView {
         });
 
         ctx.request_repaint();
+    }
+
+    fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        let _ = self
+            .controller
+            .send(Command::Drop)
+            .inspect_err(CustomError::handle_err);
     }
 }
