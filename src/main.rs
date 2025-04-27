@@ -1,12 +1,12 @@
 use jujik::{
-    commands::Command, controller::JujikController, error::CustomError, model::JujikModel,
+    commands::Command, controller::JujikController, error::JujikError, model::JujikModel,
     view::JujikView,
 };
 use log::LevelFilter;
 use simplelog::{ColorChoice, CombinedLogger, Config, TermLogger, TerminalMode, WriteLogger};
 use std::{fs::File, sync::mpsc};
 
-fn main() -> Result<(), CustomError> {
+fn main() -> Result<(), JujikError> {
     CombinedLogger::init(vec![
         TermLogger::new(
             LevelFilter::Info,
@@ -33,9 +33,9 @@ fn main() -> Result<(), CustomError> {
     let model_handler = model.run();
     let view_handler = view.run();
 
-    controller_handler.join()??;
-    model_handler.join()??;
-    view_handler.join()??;
+    controller_handler?.join()??;
+    model_handler?.join()??;
+    view_handler?.join()??;
 
     Ok(())
 }
