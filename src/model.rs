@@ -33,7 +33,7 @@ impl JujikModel {
                                     }
                                 }
                             }
-                            Command::CreateTab(pathbuf) => {
+                            Command::NewTab(pathbuf) => {
                                 let new_tab = Tab::new(pathbuf);
                                 match new_tab {
                                     Ok(new_tab) => {

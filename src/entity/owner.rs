@@ -3,7 +3,7 @@ use std::fmt::{Debug, Display};
 use crate::error::JujikError;
 use nix::unistd::{Gid, Group, Uid, User};
 
-#[derive(PartialEq, Eq, Default)]
+#[derive(PartialEq, Eq, Default, Clone)]
 pub struct EntityOwners {
     uid: u32,
     gid: u32,

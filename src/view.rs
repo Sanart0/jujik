@@ -50,11 +50,15 @@ impl JujikView {
             println!("View: {:?}", command);
 
             match command {
+                // Pin
                 Command::ShowPin(pin) => self.pins.push(pin),
+
+                // Tab
+                Command::ShowTab(tab) => self.tabs.push(tab),
+
                 Command::Drop => {
                     ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                 }
-                Command::ShowTab(tab) => self.tabs.push(tab),
                 _ => {}
             }
         };
@@ -136,7 +140,7 @@ impl App for JujikView {
                         for tab in &self.tabs {
                             if ui
                                 .selectable_label(
-                                    self.current_tab.eq(&tab.get_name()),
+                                    self.current_tab == tab.get_name(),
                                     tab.get_name(),
                                 )
                                 .clicked()
@@ -148,11 +152,13 @@ impl App for JujikView {
                 });
             });
             CentralPanel::default().show_inside(ui, |ui| {
-                // ui.label(format!("{:?}", self.current_tab));
+                ui.label(format!("{:?}", self.current_tab));
 
-                // for (idx, tab) in self.tabs.iter_mut().enumerate() {
-                //     tab.filesystem.read_path();
-                // }
+                if let Some(tab) = &self.tabs.iter().find(|tab| tab.get_name() == self.current_tab) {
+                    for entity in tab.get_entitys() {
+                        ui.label(format!("{:?}", entity));
+                    }
+                }
             });
         });
 

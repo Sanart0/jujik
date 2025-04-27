@@ -14,7 +14,7 @@ pub enum EntityPermissionsCategory {
     Other,
 }
 
-#[derive(PartialEq, Eq, Default)]
+#[derive(PartialEq, Eq, Default, Clone)]
 pub struct EntityPermissions {
     mode: u32,
 }
