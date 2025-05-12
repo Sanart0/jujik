@@ -79,6 +79,12 @@ impl JujikController {
                                         .send(Command::ChangeTabDirectory(idx, tab, pathbuf))?;
                                 }
                             }
+                            Command::ChangeTabDirectoryBack(idx, tab) => {
+                                if self.tabs.get(idx).is_some() {
+                                    self.model
+                                        .send(Command::ChangeTabDirectoryBack(idx, tab))?;
+                                }
+                            }
                             Command::NewTab(idx, tab) => {
                                 if let Some(idx) = idx {
                                     if let Some(tab_mut) = self.tabs.get_mut(idx) {

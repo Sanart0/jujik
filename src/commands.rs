@@ -20,5 +20,6 @@ pub enum Command {
     CreateTab(TabKind, PathBuf),
     DeleteTab(Tab),
     ChangeTabDirectory(usize, Tab, PathBuf),
+    ChangeTabDirectoryBack(usize, Tab),
     NewTab(Option<usize>, Tab),
 }

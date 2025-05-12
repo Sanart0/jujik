@@ -57,6 +57,16 @@ impl JujikModel {
                                     }
                                 }
                             }
+                            Command::ChangeTabDirectoryBack(idx, mut tab) => {
+                                match tab.change_dir_back() {
+                                    Ok(_) => {
+                                        self.controller.send(Command::NewTab(Some(idx), tab))?
+                                    }
+                                    Err(err) => {
+                                        self.controller.send(Command::Error(Box::new(err)))?
+                                    }
+                                }
+                            }
 
                             Command::Drop => break 'event_loop,
                             _ => {}

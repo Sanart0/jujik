@@ -94,4 +94,17 @@ impl Tab {
 
         Ok(())
     }
+
+    pub fn change_dir_back(&mut self) -> Result<(), JujikError> {
+        match &self.content {
+            TabContent::Entitys(_) => {
+                if let Some(parent) = self.pathbuf().parent() {
+                    *self = Tab::new(TabKind::Entitys, parent.to_path_buf())?;
+                }
+            }
+            _ => {}
+        }
+
+        Ok(())
+    }
 }
