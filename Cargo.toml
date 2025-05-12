@@ -10,3 +10,4 @@ winit = {version = "0.30.9", default-features = false, features = ["wayland"]}
 log = "0.4.26"
 simplelog = "0.12.2"
 nix = {version = "0.29.0", features = ["user"]}
+egui_extras = "0.31.1"

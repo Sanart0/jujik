@@ -1,6 +1,5 @@
 use crate::{commands::Command, error::JujikError, pin::Pin, tab::Tab};
 use std::{
-    path::PathBuf,
     sync::mpsc::{Receiver, Sender},
     thread::{self, JoinHandle},
 };
@@ -30,7 +29,7 @@ impl JujikController {
         }
     }
 
-    pub fn run(self) -> Result<JoinHandle<Result<(), JujikError>>, JujikError> {
+    pub fn run(mut self) -> Result<JoinHandle<Result<(), JujikError>>, JujikError> {
         Ok(thread::Builder::new()
             .name("Controller".to_string())
             .spawn(move || -> Result<(), JujikError> {
@@ -40,37 +39,59 @@ impl JujikController {
 
                         match command {
                             // Pin
-                            Command::NewPin(mut pathbuf) => {
+                            Command::CreatePin(mut pathbuf) => {
                                 if pathbuf.exists() {
                                     if !pathbuf.is_dir() {
                                         if let Some(parent) = pathbuf.parent() {
                                             pathbuf = parent.to_path_buf();
                                         }
                                     }
-                                    self.model.send(Command::NewPin(pathbuf))?;
+                                    self.model.send(Command::CreatePin(pathbuf))?;
                                 } else {
                                     self.view.send(Command::Error(Box::new(JujikError::Other(
                                         format!("Path {:?} does not exist", pathbuf),
                                     ))))?;
                                 }
                             }
-                            Command::ShowPin(pin) => self.view.send(Command::ShowPin(pin))?,
+                            Command::NewPin(pin) => {
+                                self.pins.push(pin);
+                                self.sync_view()?;
+                            }
 
                             // Tab
-                            Command::NewTab(pin) => {
-                                let tab_exist = self
-                                    .tabs
-                                    .iter()
-                                    .filter(|tab| PathBuf::from(tab.get_name())== pin)
-                                    .collect::<Vec<_>>()
-                                    .is_empty();
-
-                                if tab_exist {
-                                    self.model.send(Command::NewTab(pin))?
+                            Command::CreateTab(tab_kind, mut pathbuf) => {
+                                if pathbuf.exists() {
+                                    if !pathbuf.is_dir() {
+                                        if let Some(parent) = pathbuf.parent() {
+                                            pathbuf = parent.to_path_buf();
+                                        }
+                                    }
+                                    self.model.send(Command::CreateTab(tab_kind, pathbuf))?
+                                } else {
+                                    self.view.send(Command::Error(Box::new(JujikError::Other(
+                                        format!("Path {:?} does not exist", pathbuf),
+                                    ))))?;
                                 }
                             }
-                            Command::ShowTab(tab) => self.view.send(Command::ShowTab(tab))?,
+                            Command::ChangeTabDirectory(idx, tab, pathbuf) => {
+                                if self.tabs.get(idx).is_some() {
+                                    self.model
+                                        .send(Command::ChangeTabDirectory(idx, tab, pathbuf))?;
+                                }
+                            }
+                            Command::NewTab(idx, tab) => {
+                                if let Some(idx) = idx {
+                                    if let Some(tab_mut) = self.tabs.get_mut(idx) {
+                                        *tab_mut = tab;
+                                    }
+                                } else {
+                                    self.tabs.push(tab);
+                                }
 
+                                self.sync_view()?;
+                            }
+
+                            // Other
                             Command::Error(err) => self.view.send(Command::Error(err))?,
                             Command::Drop => {
                                 self.send_drop()?;
@@ -84,6 +105,12 @@ impl JujikController {
                 }
                 Ok(())
             })?)
+    }
+
+    fn sync_view(&self) -> Result<(), JujikError> {
+        Ok(self
+            .view
+            .send(Command::Sync(self.pins.clone(), self.tabs.clone()))?)
     }
 
     fn send_drop(&self) -> Result<(), JujikError> {

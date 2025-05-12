@@ -1,21 +1,24 @@
-use crate::{pin::Pin, tab::Tab};
+use crate::{
+    pin::Pin,
+    tab::{Tab, TabKind},
+};
 use std::{fmt::Debug, path::PathBuf};
 
 #[derive(Debug)]
 pub enum Command {
+    // Other
     Drop,
     Error(Box<dyn Debug + Send>),
     Sync(Vec<Pin>, Vec<Tab>),
 
     // Pin
-    NewPin(PathBuf),
+    CreatePin(PathBuf),
     DeletePin(Pin),
-    ShowPin(Pin),
+    NewPin(Pin),
 
     // Tab
-    NewTab(PathBuf),
+    CreateTab(TabKind, PathBuf),
     DeleteTab(Tab),
-    ChangeDirectory(Tab, PathBuf),
-    ShowTab(Tab),
-    // External Storage
+    ChangeTabDirectory(usize, Tab, PathBuf),
+    NewTab(Option<usize>, Tab),
 }

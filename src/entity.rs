@@ -43,9 +43,31 @@ impl Entity {
             owners,
         })
     }
+}
+
+impl Entity {
+    pub fn path(&self) -> PathBuf {
+        self.global_path.clone()
+    }
 
     pub fn name(&self) -> String {
         self.name.clone()
+    }
+
+    pub fn extansion(&self) -> &Option<String> {
+        &self.extension
+    }
+
+    pub fn kind(&self) -> &EntityKind {
+        &self.kind
+    }
+
+    pub fn permissions(&self) -> &EntityPermissions {
+        &self.permissions
+    }
+
+    pub fn owners(&self) -> &EntityOwners {
+        &self.owners
     }
 }
 
@@ -61,6 +83,9 @@ impl Entity {
         if let Some(name) = path.file_name().and_then(|name| name.to_str()) {
             let mut name_split = name.split('.').collect::<Vec<&str>>();
             if name_split.len() > 1 {
+                if name_split[0].is_empty() {
+                    return Ok(name.to_string());
+                }
                 name_split.pop();
                 Ok(name_split.join("."))
             } else {
@@ -80,8 +105,23 @@ impl Entity {
     }
 
     fn get_extansion(path: &Path) -> Result<Option<String>, JujikError> {
+        if path.is_dir() {
+            return Ok(None);
+        }
+
         if let Some(extansion) = path.extension() {
-            Ok(extansion.to_str().map(|extansion| extansion.to_string()))
+            if let Some(extansion) = extansion.to_str() {
+                if let Some(char) = extansion.chars().next() {
+                    if char.is_numeric() {
+                        return Ok(None);
+                    }
+                }
+
+                Ok(Some(extansion.to_string()))
+            } else {
+                //TODO Handle error
+                Ok(None)
+            }
         } else {
             //TODO Handle error
             Ok(None)
