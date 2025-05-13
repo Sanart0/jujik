@@ -70,6 +70,13 @@ impl Tab {
         }
     }
 
+    pub fn entitys_mut(&mut self) -> Option<&mut Vec<Entity>> {
+        match &mut self.content {
+            TabContent::Entitys(entitys) => Some(entitys),
+            _ => None,
+        }
+    }
+
     fn read_dir(pathbuf: PathBuf) -> Result<Vec<Entity>, JujikError> {
         let mut entitys: Vec<Entity> = Vec::new();
 

@@ -29,7 +29,7 @@ impl Entity {
 
         let global_path = Self::get_global_path(path)?;
         let name = Self::get_name(path)?;
-        let extension = Self::get_extansion(path)?;
+        let extension = Self::get_extension(path)?;
         let kind = Self::get_kind(path)?;
         let permissions = Self::get_permissions(path)?;
         let owners = Self::get_owners(path)?;
@@ -54,7 +54,15 @@ impl Entity {
         self.name.clone()
     }
 
-    pub fn extansion(&self) -> &Option<String> {
+    pub fn name_with_extension(&self) -> String {
+        if let Some(extension) = &self.extension {
+            self.name.clone() + "." + extension
+        } else {
+            self.name.clone()
+        }
+    }
+
+    pub fn extension(&self) -> &Option<String> {
         &self.extension
     }
 
@@ -104,20 +112,20 @@ impl Entity {
         }
     }
 
-    fn get_extansion(path: &Path) -> Result<Option<String>, JujikError> {
+    fn get_extension(path: &Path) -> Result<Option<String>, JujikError> {
         if path.is_dir() {
             return Ok(None);
         }
 
-        if let Some(extansion) = path.extension() {
-            if let Some(extansion) = extansion.to_str() {
-                if let Some(char) = extansion.chars().next() {
+        if let Some(extension) = path.extension() {
+            if let Some(extension) = extension.to_str() {
+                if let Some(char) = extension.chars().next() {
                     if char.is_numeric() {
                         return Ok(None);
                     }
                 }
 
-                Ok(Some(extansion.to_string()))
+                Ok(Some(extension.to_string()))
             } else {
                 //TODO Handle error
                 Ok(None)
@@ -168,7 +176,7 @@ impl Entity {
 
 impl Display for Entity {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let extansion = if let Some(extension) = &self.extension {
+        let extension = if let Some(extension) = &self.extension {
             extension
         } else {
             ""
@@ -176,7 +184,7 @@ impl Display for Entity {
         f.debug_struct("Entity")
             .field("global_path", &self.global_path)
             .field("name", &self.name)
-            .field("extension", &extansion)
+            .field("extension", &extension)
             .field("kind", &self.kind)
             .field("permissions", &self.permissions)
             .field("owners", &self.owners)

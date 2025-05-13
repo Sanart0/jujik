@@ -53,8 +53,45 @@ impl JujikController {
                                     ))))?;
                                 }
                             }
-                            Command::NewPin(pin) => {
-                                self.pins.push(pin);
+                            Command::DeletePin(idx) => {
+                                if idx < self.pins.len() {
+                                    self.pins.remove(idx);
+                                }
+
+                                self.sync_view()?;
+                            }
+                            Command::ChangePinName(idx, name) => {
+                                if let Some(pin) = self.pins.get_mut(idx) {
+                                    pin.set_name(name);
+                                }
+
+                                self.sync_view()?;
+                            }
+                            Command::ChangePinDirectory(idx, pathbuf) => {
+                                if let Some(pin) = self.pins.get_mut(idx) {
+                                    pin.set_path(pathbuf);
+                                }
+
+                                self.sync_view()?;
+                            }
+                            Command::ChangePinPosition(from, to, pin) => {
+                                if from < self.pins.len() && to < self.pins.len() {
+                                    let pin_temp = self.pins[to].clone();
+                                    self.pins[to] = pin.clone();
+                                    self.pins[from] = pin_temp;
+                                }
+
+                                self.sync_view()?;
+                            }
+                            Command::NewPin(idx, pin) => {
+                                if let Some(idx) = idx {
+                                    if let Some(pin_mut) = self.pins.get_mut(idx) {
+                                        *pin_mut = pin;
+                                    }
+                                } else {
+                                    self.pins.push(pin);
+                                }
+
                                 self.sync_view()?;
                             }
 
@@ -77,12 +114,6 @@ impl JujikController {
                                 if self.tabs.get(idx).is_some() {
                                     self.model
                                         .send(Command::ChangeTabDirectory(idx, tab, pathbuf))?;
-                                }
-                            }
-                            Command::ChangeTabDirectoryBack(idx, tab) => {
-                                if self.tabs.get(idx).is_some() {
-                                    self.model
-                                        .send(Command::ChangeTabDirectoryBack(idx, tab))?;
                                 }
                             }
                             Command::NewTab(idx, tab) => {
