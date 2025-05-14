@@ -35,20 +35,16 @@ impl Tab {
         })
     }
 
-    pub fn empty() -> Self {
-        Self {
-            name: String::new(),
-            pathbuf: PathBuf::new(),
-            content: TabContent::None,
-        }
-    }
-
     pub fn name(&self) -> String {
         self.name.clone()
     }
 
-    pub fn pathbuf(&self) -> PathBuf {
+    pub fn path(&self) -> PathBuf {
         self.pathbuf.clone()
+    }
+
+    pub fn set_name(&mut self, name: String) {
+        self.name.clone_from(&name);
     }
 
     pub fn path_str(&self) -> String {
@@ -105,7 +101,7 @@ impl Tab {
     pub fn change_dir_back(&mut self) -> Result<(), JujikError> {
         match &self.content {
             TabContent::Entitys(_) => {
-                if let Some(parent) = self.pathbuf().parent() {
+                if let Some(parent) = self.path().parent() {
                     *self = Tab::new(TabKind::Entitys, parent.to_path_buf())?;
                 }
             }
@@ -113,5 +109,15 @@ impl Tab {
         }
 
         Ok(())
+    }
+}
+
+impl Default for Tab {
+    fn default() -> Self {
+        Self {
+            name: String::new(),
+            pathbuf: PathBuf::new(),
+            content: TabContent::None,
+        }
     }
 }

@@ -15,13 +15,6 @@ impl Pin {
         })
     }
 
-    pub fn empty() -> Self {
-        Self {
-            name: String::new(),
-            pathbuf: PathBuf::new(),
-        }
-    }
-
     pub fn from(name: String, pathbuf: PathBuf) -> Self {
         Self { name, pathbuf }
     }

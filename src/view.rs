@@ -17,12 +17,31 @@ use std::{
 };
 use winit::platform::wayland::EventLoopBuilderExtWayland;
 
+#[derive(Default)]
 struct PinInfo {
     show: bool,
     idx: usize,
     pin: Pin,
     name: String,
     path: String,
+}
+
+#[derive(Default)]
+struct TabInfo {
+    show: bool,
+    idx: usize,
+    tab: Tab,
+    name: String,
+    path: String,
+}
+
+#[derive(Default)]
+struct EntityInfo {
+    show: bool,
+    idx_tab: usize,
+    tab: Tab,
+    idx_entity: usize,
+    entity: Entity,
 }
 
 struct ShowEntitysColumn {
@@ -40,6 +59,7 @@ struct ShowEntitysColumn {
 struct JujikStyle {
     primary_color: Color32,
     background_color: Color32,
+    selection_color: Color32,
     text_color: Color32,
     text_size: f32,
 }
@@ -53,6 +73,8 @@ pub struct JujikView {
     current_tab_idx: usize,
     style: JujikStyle,
     pin_info: PinInfo,
+    tab_info: TabInfo,
+    entity_info: EntityInfo,
 }
 
 impl JujikView {
@@ -65,13 +87,9 @@ impl JujikView {
             entitys_show: ShowEntitysColumn::default(),
             current_tab_idx: 0,
             style: JujikStyle::default(),
-            pin_info: PinInfo {
-                show: false,
-                idx: 0,
-                pin: Pin::empty(),
-                name: String::new(),
-                path: String::new(),
-            },
+            pin_info: PinInfo::default(),
+            tab_info: TabInfo::default(),
+            entity_info: EntityInfo::default(),
         }
     }
 
@@ -131,7 +149,7 @@ impl JujikView {
         visuals.widgets.noninteractive.fg_stroke = Stroke::new(1.0, self.style.text_color);
         visuals.widgets.inactive.fg_stroke = Stroke::new(1.0, self.style.text_color);
         visuals.extreme_bg_color = self.style.background_color;
-        visuals.selection.bg_fill = self.style.background_color;
+        visuals.selection.bg_fill = self.style.selection_color;
 
         ctx.set_visuals(visuals);
     }
@@ -212,7 +230,7 @@ impl App for JujikView {
 
         CentralPanel::default().show(ctx, |ui| {
             TopBottomPanel::top("tab").show_inside(ui, |ui| {
-                self.tab(ui);
+                self.tab(ui, ctx);
             });
             CentralPanel::default().show_inside(ui, |ui| {
                 self.tab_content(ui);
@@ -335,7 +353,7 @@ impl JujikView {
             if delete.clicked() {
                 let _ = self
                     .controller
-                    .send(Command::DeletePin(idx))
+                    .send(Command::DeletePin(idx, pin.clone()))
                     .inspect_err(JujikError::handle_err);
 
                 ui.close_menu();
@@ -354,8 +372,9 @@ impl JujikView {
     }
 
     fn pin_info(&mut self, ctx: &Context) {
-        let modal =
-            Modal::new(Id::new(format!("Pin Info: {}", self.pin_info.name))).show(ctx, |ui| {
+        let modal = Modal::new(Id::new(format!("Pin Info: {}", self.pin_info.pin.name()))).show(
+            ctx,
+            |ui| {
                 ui.vertical_centered_justified(|ui| {
                     Sides::new().show(
                         ui,
@@ -404,6 +423,7 @@ impl JujikView {
                                         .controller
                                         .send(Command::ChangePinName(
                                             self.pin_info.idx,
+                                            self.pin_info.pin.clone(),
                                             self.pin_info.name.clone(),
                                         ))
                                         .inspect_err(JujikError::handle_err);
@@ -414,6 +434,7 @@ impl JujikView {
                                         .controller
                                         .send(Command::ChangePinDirectory(
                                             self.pin_info.idx,
+                                            self.pin_info.pin.clone(),
                                             PathBuf::from(self.pin_info.path.clone()),
                                         ))
                                         .inspect_err(JujikError::handle_err);
@@ -424,7 +445,8 @@ impl JujikView {
                         },
                     );
                 })
-            });
+            },
+        );
 
         if modal.backdrop_response.clicked() {
             self.pin_info.show = false;
@@ -434,7 +456,7 @@ impl JujikView {
 
 // Tab
 impl JujikView {
-    fn tab(&mut self, ui: &mut Ui) {
+    fn tab(&mut self, ui: &mut Ui, ctx: &Context) {
         let mut scroll = ui.ctx().style().spacing.scroll;
         scroll.floating = false;
         scroll.bar_width = 4.0;
@@ -445,7 +467,7 @@ impl JujikView {
 
         ui.horizontal(|ui| {
             ScrollArea::horizontal().show(ui, |ui| {
-                for (idx, tab) in self.tabs.iter().enumerate() {
+                for (idx, tab) in self.tabs.clone().iter().enumerate() {
                     let response = ui.selectable_label(
                         self.current_tab_idx == idx,
                         RichText::new(tab.name())
@@ -458,6 +480,10 @@ impl JujikView {
                     }
 
                     self.tab_context_menu(ui, &response, idx, tab);
+                }
+
+                if self.tab_info.show {
+                    self.tab_info(ctx);
                 }
             });
         });
@@ -475,7 +501,7 @@ impl JujikView {
 
                         ui.separator();
 
-                        self.table(ui, tab.clone())
+                        self.table(ui, self.current_tab_idx, tab.clone())
                     }
                     TabContent::Editor(_pathbuf) => todo!(),
                     _ => {}
@@ -484,14 +510,7 @@ impl JujikView {
         }
     }
 
-    fn table(&self, ui: &mut Ui, mut tab: Tab) {
-        let tab_clone = tab.clone();
-        let entitys = if let Some(entitys) = tab.entitys_mut() {
-            entitys
-        } else {
-            &mut Vec::new()
-        };
-
+    fn table(&mut self, ui: &mut Ui, idx_tab: usize, tab: Tab) {
         let mut scroll = ui.ctx().style().spacing.scroll;
         scroll.floating = false;
         scroll.bar_width = 4.0;
@@ -604,187 +623,349 @@ impl JujikView {
                     }
                 })
                 .body(|mut body| {
-                    for entity in entitys {
-                        body.row(10.0, |mut row| {
-                            if self.entitys_show.filekind {
-                                row.col(|ui| {
-                                    ui.centered_and_justified(|ui| {
-                                        let response = ui.add(
-                                            Label::new(
-                                                RichText::new(format!("{}", entity.kind()))
-                                                    .color(self.style.text_color)
-                                                    .size(self.style.text_size),
-                                            )
-                                            .selectable(false)
-                                            .sense(Sense::click()),
-                                        );
+                    if let Some(entitys) = tab.entitys() {
+                        for (idx_entity, entity) in entitys.iter().enumerate() {
+                            body.row(10.0, |mut row| {
+                                if self.entitys_show.filekind {
+                                    row.col(|ui| {
+                                        ui.centered_and_justified(|ui| {
+                                            let response = ui.add(
+                                                Label::new(
+                                                    RichText::new(format!("{}", entity.kind()))
+                                                        .color(self.style.text_color)
+                                                        .size(self.style.text_size),
+                                                )
+                                                .selectable(false)
+                                                .sense(Sense::click()),
+                                            );
 
-                                        self.table_entity_context_menu(
-                                            &response, &tab_clone, entity,
-                                        );
+                                            self.entity_context_menu(
+                                                ui, &response, idx_tab, &tab, idx_entity, entity,
+                                            );
+                                        });
                                     });
-                                });
-                            }
-                            if self.entitys_show.name {
-                                row.col(|ui| {
-                                    ui.centered_and_justified(|ui| {
-                                        let name = if self.entitys_show.name_with_extension {
-                                            entity.name_with_extension()
+                                }
+                                if self.entitys_show.name {
+                                    row.col(|ui| {
+                                        ui.centered_and_justified(|ui| {
+                                            let name = if self.entitys_show.name_with_extension {
+                                                entity.name_with_extension()
+                                            } else {
+                                                entity.name()
+                                            };
+
+                                            let response = ui.add(
+                                                Label::new(
+                                                    RichText::new(format!("{}", name))
+                                                        .color(self.style.text_color)
+                                                        .size(self.style.text_size),
+                                                )
+                                                .selectable(false)
+                                                .sense(Sense::click()),
+                                            );
+
+                                            if response.double_clicked() {
+                                                self.go_next_directory(&tab, entity.path());
+                                            }
+
+                                            self.entity_context_menu(
+                                                ui, &response, idx_tab, &tab, idx_entity, entity,
+                                            );
+                                        });
+                                    });
+                                }
+                                if self.entitys_show.extension {
+                                    row.col(|ui| {
+                                        let extension = if let Some(extension) = entity.extension()
+                                        {
+                                            extension.to_string()
                                         } else {
-                                            entity.name()
+                                            String::new()
                                         };
 
-                                        let response = ui.add(
-                                            Label::new(
-                                                RichText::new(format!("{}", name))
+                                        ui.centered_and_justified(|ui| {
+                                            let response = ui.add(
+                                                Label::new(
+                                                    RichText::new(format!("{}", extension))
+                                                        .color(self.style.text_color)
+                                                        .size(self.style.text_size),
+                                                )
+                                                .selectable(false)
+                                                .sense(Sense::click()),
+                                            );
+
+                                            self.entity_context_menu(
+                                                ui, &response, idx_tab, &tab, idx_entity, entity,
+                                            );
+                                        });
+                                    });
+                                }
+                                if self.entitys_show.permissions {
+                                    row.col(|ui| {
+                                        ui.centered_and_justified(|ui| {
+                                            let response = ui.add(
+                                                Label::new(
+                                                    RichText::new(format!(
+                                                        "{}",
+                                                        entity.permissions()
+                                                    ))
                                                     .color(self.style.text_color)
                                                     .size(self.style.text_size),
-                                            )
-                                            .selectable(false)
-                                            .sense(Sense::click()),
-                                        );
+                                                )
+                                                .selectable(false)
+                                                .sense(Sense::click()),
+                                            );
 
-                                        if response.double_clicked() {
-                                            self.go_next_directory(&tab_clone, entity.path());
-                                        }
-
-                                        self.table_entity_context_menu(
-                                            &response, &tab_clone, entity,
-                                        );
+                                            self.entity_context_menu(
+                                                ui, &response, idx_tab, &tab, idx_entity, entity,
+                                            );
+                                        });
                                     });
-                                });
-                            }
-                            if self.entitys_show.extension {
-                                row.col(|ui| {
-                                    let extension = if let Some(extension) = entity.extension() {
-                                        extension.to_string()
-                                    } else {
-                                        String::new()
-                                    };
+                                }
+                                if self.entitys_show.owners {
+                                    row.col(|ui| {
+                                        ui.centered_and_justified(|ui| {
+                                            let response = ui.add(
+                                                Label::new(
+                                                    RichText::new(format!("{}", entity.owners()))
+                                                        .color(self.style.text_color)
+                                                        .size(self.style.text_size),
+                                                )
+                                                .selectable(false)
+                                                .sense(Sense::click()),
+                                            );
 
-                                    ui.centered_and_justified(|ui| {
-                                        let response = ui.add(
-                                            Label::new(
-                                                RichText::new(format!("{}", extension))
-                                                    .color(self.style.text_color)
-                                                    .size(self.style.text_size),
-                                            )
-                                            .selectable(false)
-                                            .sense(Sense::click()),
-                                        );
-
-                                        self.table_entity_context_menu(
-                                            &response, &tab_clone, entity,
-                                        );
+                                            self.entity_context_menu(
+                                                ui, &response, idx_tab, &tab, idx_entity, entity,
+                                            );
+                                        });
                                     });
-                                });
-                            }
-                            if self.entitys_show.permissions {
-                                row.col(|ui| {
-                                    ui.centered_and_justified(|ui| {
-                                        let response = ui.add(
-                                            Label::new(
-                                                RichText::new(format!("{}", entity.permissions()))
-                                                    .color(self.style.text_color)
-                                                    .size(self.style.text_size),
-                                            )
-                                            .selectable(false)
-                                            .sense(Sense::click()),
-                                        );
+                                }
+                                if self.entitys_show.size {
+                                    row.col(|ui| {
+                                        ui.centered_and_justified(|ui| {
+                                            let response = ui.add(
+                                                Label::new(
+                                                    RichText::new(format!("{}", 0))
+                                                        .color(self.style.text_color)
+                                                        .size(self.style.text_size),
+                                                )
+                                                .selectable(false)
+                                                .sense(Sense::click()),
+                                            );
 
-                                        self.table_entity_context_menu(
-                                            &response, &tab_clone, entity,
-                                        );
+                                            self.entity_context_menu(
+                                                ui, &response, idx_tab, &tab, idx_entity, entity,
+                                            );
+                                        });
                                     });
-                                });
-                            }
-                            if self.entitys_show.owners {
-                                row.col(|ui| {
-                                    ui.centered_and_justified(|ui| {
-                                        let response = ui.add(
-                                            Label::new(
-                                                RichText::new(format!("{}", entity.owners()))
-                                                    .color(self.style.text_color)
-                                                    .size(self.style.text_size),
-                                            )
-                                            .selectable(false)
-                                            .sense(Sense::click()),
-                                        );
+                                }
+                                if self.entitys_show.modification_date {
+                                    row.col(|ui| {
+                                        ui.centered_and_justified(|ui| {
+                                            let response = ui.add(
+                                                Label::new(
+                                                    RichText::new(format!("{}", 0))
+                                                        .color(self.style.text_color)
+                                                        .size(self.style.text_size),
+                                                )
+                                                .selectable(false)
+                                                .sense(Sense::click()),
+                                            );
 
-                                        self.table_entity_context_menu(
-                                            &response, &tab_clone, entity,
-                                        );
+                                            self.entity_context_menu(
+                                                ui, &response, idx_tab, &tab, idx_entity, entity,
+                                            );
+                                        });
                                     });
-                                });
-                            }
-                            if self.entitys_show.size {
-                                row.col(|ui| {
-                                    ui.centered_and_justified(|ui| {
-                                        let response = ui.add(
-                                            Label::new(
-                                                RichText::new(format!("{}", 0))
-                                                    .color(self.style.text_color)
-                                                    .size(self.style.text_size),
-                                            )
-                                            .selectable(false)
-                                            .sense(Sense::click()),
-                                        );
+                                }
+                                if self.entitys_show.creation_data {
+                                    row.col(|ui| {
+                                        ui.centered_and_justified(|ui| {
+                                            let response = ui.add(
+                                                Label::new(
+                                                    RichText::new(format!("{}", 0))
+                                                        .color(self.style.text_color)
+                                                        .size(self.style.text_size),
+                                                )
+                                                .selectable(false)
+                                                .sense(Sense::click()),
+                                            );
 
-                                        self.table_entity_context_menu(
-                                            &response, &tab_clone, entity,
-                                        );
+                                            self.entity_context_menu(
+                                                ui, &response, idx_tab, &tab, idx_entity, entity,
+                                            );
+                                        });
                                     });
-                                });
-                            }
-                            if self.entitys_show.modification_date {
-                                row.col(|ui| {
-                                    ui.centered_and_justified(|ui| {
-                                        let response = ui.add(
-                                            Label::new(
-                                                RichText::new(format!("{}", 0))
-                                                    .color(self.style.text_color)
-                                                    .size(self.style.text_size),
-                                            )
-                                            .selectable(false)
-                                            .sense(Sense::click()),
-                                        );
-
-                                        self.table_entity_context_menu(
-                                            &response, &tab_clone, entity,
-                                        );
-                                    });
-                                });
-                            }
-                            if self.entitys_show.creation_data {
-                                row.col(|ui| {
-                                    ui.centered_and_justified(|ui| {
-                                        let response = ui.add(
-                                            Label::new(
-                                                RichText::new(format!("{}", 0))
-                                                    .color(self.style.text_color)
-                                                    .size(self.style.text_size),
-                                            )
-                                            .selectable(false)
-                                            .sense(Sense::click()),
-                                        );
-
-                                        self.table_entity_context_menu(
-                                            &response, &tab_clone, entity,
-                                        );
-                                    });
-                                });
-                            }
-                        });
+                                }
+                            });
+                        }
                     }
                 });
         });
     }
 
-    fn tab_context_menu(&self, ui: &mut Ui, response: &Response, idx: usize, tab: &Tab) {
-        response.context_menu(|ui| {});
+    fn tab_context_menu(&mut self, ui: &mut Ui, response: &Response, idx: usize, tab: &Tab) {
+        response.context_menu(|ui| {
+            let _position = ui.menu_button(
+                RichText::new("Position")
+                    .color(self.style.text_color)
+                    .size(self.style.text_size),
+                |ui| {
+                    let left = ui.button(
+                        RichText::new("Left")
+                            .color(self.style.text_color)
+                            .size(self.style.text_size),
+                    );
+
+                    let right = ui.button(
+                        RichText::new("Rigth")
+                            .color(self.style.text_color)
+                            .size(self.style.text_size),
+                    );
+
+                    if left.clicked() {
+                        let _ = self
+                            .controller
+                            .send(Command::ChangeTabPosition(idx, idx - 1, tab.clone()))
+                            .inspect_err(JujikError::handle_err);
+                        self.current_tab_idx = idx - 1;
+                    }
+
+                    if right.clicked() {
+                        let _ = self
+                            .controller
+                            .send(Command::ChangeTabPosition(idx, idx + 1, tab.clone()))
+                            .inspect_err(JujikError::handle_err);
+                        self.current_tab_idx = idx + 1;
+                    }
+                },
+            );
+
+            let delete = ui.button(
+                RichText::new("Delete")
+                    .color(self.style.text_color)
+                    .size(self.style.text_size),
+            );
+
+            let info = ui.button(
+                RichText::new("Info")
+                    .color(self.style.text_color)
+                    .size(self.style.text_size),
+            );
+
+            if delete.clicked() {
+                let _ = self
+                    .controller
+                    .send(Command::DeleteTab(idx, tab.clone()))
+                    .inspect_err(JujikError::handle_err);
+
+                ui.close_menu();
+            }
+
+            if info.clicked() {
+                self.tab_info.show = true;
+                self.tab_info.idx = idx;
+                self.tab_info.tab = tab.clone();
+                self.tab_info.name = self.tab_info.tab.name();
+                self.tab_info.path = self.tab_info.tab.path_str();
+
+                ui.close_menu();
+            }
+        });
     }
 
-    fn table_entity_context_menu(&self, response: &Response, tab: &Tab, entity: &mut Entity) {
+    fn tab_info(&mut self, ctx: &Context) {
+        let modal = Modal::new(Id::new(format!("Tab Info: {}", self.tab_info.tab.name()))).show(
+            ctx,
+            |ui| {
+                ui.vertical_centered_justified(|ui| {
+                    Sides::new().show(
+                        ui,
+                        |ui| {
+                            ui.label(
+                                RichText::new("Name: ")
+                                    .color(self.style.text_color)
+                                    .size(self.style.text_size),
+                            );
+                        },
+                        |ui| {
+                            ui.text_edit_singleline(&mut self.tab_info.name);
+                        },
+                    );
+
+                    Sides::new().show(
+                        ui,
+                        |ui| {
+                            ui.label(
+                                RichText::new("Path: ")
+                                    .color(self.style.text_color)
+                                    .size(self.style.text_size),
+                            );
+                        },
+                        |ui| {
+                            ui.text_edit_singleline(&mut self.tab_info.path);
+                        },
+                    );
+
+                    ui.separator();
+
+                    Sides::new().show(
+                        ui,
+                        |_ui| {},
+                        |ui| {
+                            if ui
+                                .button(
+                                    RichText::new("Save")
+                                        .color(self.style.text_color)
+                                        .size(self.style.text_size),
+                                )
+                                .clicked()
+                            {
+                                if self.tab_info.tab.name().ne(&self.tab_info.name) {
+                                    let _ = self
+                                        .controller
+                                        .send(Command::ChangeTabName(
+                                            self.tab_info.idx,
+                                            self.tab_info.tab.clone(),
+                                            self.tab_info.name.clone(),
+                                        ))
+                                        .inspect_err(JujikError::handle_err);
+                                }
+
+                                if self.tab_info.tab.path_str().ne(&self.tab_info.path) {
+                                    let _ = self
+                                        .controller
+                                        .send(Command::ChangeTabDirectory(
+                                            self.tab_info.idx,
+                                            self.tab_info.tab.clone(),
+                                            Some(PathBuf::from(self.tab_info.path.clone())),
+                                        ))
+                                        .inspect_err(JujikError::handle_err);
+                                }
+
+                                self.tab_info.show = false;
+                            }
+                        },
+                    );
+                })
+            },
+        );
+
+        if modal.backdrop_response.clicked() {
+            self.tab_info.show = false;
+        }
+    }
+
+    fn entity_context_menu(
+        &mut self,
+        ui: &mut Ui,
+        response: &Response,
+        idx_tab: usize,
+        tab: &Tab,
+        idx_entity: usize,
+        entity: &Entity,
+    ) {
         response.context_menu(|ui| {
             let open = ui.button(
                 RichText::new("Open")
@@ -792,11 +973,136 @@ impl JujikView {
                     .size(self.style.text_size),
             );
 
+            let select = ui.button(
+                RichText::new("Select")
+                    .color(self.style.text_color)
+                    .size(self.style.text_size),
+            );
+
+            let delete = ui.button(
+                RichText::new("Delete")
+                    .color(self.style.text_color)
+                    .size(self.style.text_size),
+            );
+
+            let info = ui.button(
+                RichText::new("Info")
+                    .color(self.style.text_color)
+                    .size(self.style.text_size),
+            );
+
             if open.clicked() {
                 self.go_next_directory(tab, entity.path());
+
+                ui.close_menu();
+            }
+
+            if select.clicked() {
+                ui.close_menu();
+            }
+
+            if delete.clicked() {
+                // let _ = self
+                //     .controller
+                //     .send()
+                //     .inspect_err(JujikError::handle_err);
+
+                ui.close_menu();
+            }
+
+            if info.clicked() {
+                self.entity_info.show = true;
+                self.entity_info.idx_tab = idx_tab;
+                self.entity_info.tab = tab.clone();
+                self.entity_info.idx_entity = idx_entity;
+                self.entity_info.entity = entity.clone();
+
                 ui.close_menu();
             }
         });
+    }
+
+    fn entity_info(&mut self, ctx: &Context) {
+        let modal = Modal::new(Id::new(format!(
+            "Entity Info: {}",
+            self.tab_info.tab.name()
+        )))
+        .show(ctx, |ui| {
+            ui.vertical_centered_justified(|ui| {
+                Sides::new().show(
+                    ui,
+                    |ui| {
+                        ui.label(
+                            RichText::new("Name: ")
+                                .color(self.style.text_color)
+                                .size(self.style.text_size),
+                        );
+                    },
+                    |ui| {
+                        ui.text_edit_singleline(&mut self.tab_info.name);
+                    },
+                );
+
+                Sides::new().show(
+                    ui,
+                    |ui| {
+                        ui.label(
+                            RichText::new("Path: ")
+                                .color(self.style.text_color)
+                                .size(self.style.text_size),
+                        );
+                    },
+                    |ui| {
+                        ui.text_edit_singleline(&mut self.tab_info.path);
+                    },
+                );
+
+                ui.separator();
+
+                Sides::new().show(
+                    ui,
+                    |_ui| {},
+                    |ui| {
+                        if ui
+                            .button(
+                                RichText::new("Save")
+                                    .color(self.style.text_color)
+                                    .size(self.style.text_size),
+                            )
+                            .clicked()
+                        {
+                            if self.tab_info.tab.name().ne(&self.tab_info.name) {
+                                let _ = self
+                                    .controller
+                                    .send(Command::ChangeTabName(
+                                        self.tab_info.idx,
+                                        self.tab_info.tab.clone(),
+                                        self.tab_info.name.clone(),
+                                    ))
+                                    .inspect_err(JujikError::handle_err);
+                            }
+
+                            if self.tab_info.tab.path_str().ne(&self.tab_info.path) {
+                                let _ = self
+                                    .controller
+                                    .send(Command::ChangeTabDirectory(
+                                        self.tab_info.idx,
+                                        self.tab_info.tab.clone(),
+                                        Some(PathBuf::from(self.tab_info.path.clone())),
+                                    ))
+                                    .inspect_err(JujikError::handle_err);
+                            }
+
+                            self.tab_info.show = false;
+                        }
+                    },
+                );
+            })
+        });
+
+        if modal.backdrop_response.clicked() {
+            self.tab_info.show = false;
+        }
     }
 
     fn go_next_directory(&self, tab: &Tab, pathbuf: PathBuf) {
@@ -861,6 +1167,7 @@ impl Default for JujikStyle {
         Self {
             primary_color: Color32::from_rgb(100, 100, 100),
             background_color: Color32::from_rgb(50, 50, 50),
+            selection_color: Color32::from_rgb(50, 100, 50),
             text_color: Color32::LIGHT_GRAY,
             text_size: 18.0,
         }

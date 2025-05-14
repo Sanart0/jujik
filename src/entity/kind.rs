@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, Default, PartialEq, Eq, Clone)]
 pub enum EntityKind {
     File,
     Directory,
@@ -9,6 +9,7 @@ pub enum EntityKind {
     Character,
     Pipe,
     Socket,
+    #[default]
     Unknown,
 }
 

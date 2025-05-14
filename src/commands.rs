@@ -1,4 +1,5 @@
 use crate::{
+    entity::{Entity, owner::EntityOwners, permission::EntityPermissions},
     pin::Pin,
     tab::{Tab, TabKind},
 };
@@ -13,17 +14,25 @@ pub enum Command {
 
     // Pin
     CreatePin(PathBuf),
-    DeletePin(usize),
-    ChangePinName(usize, String),
-    ChangePinDirectory(usize, PathBuf),
+    DeletePin(usize, Pin),
+    ChangePinName(usize, Pin, String),
+    ChangePinDirectory(usize, Pin, PathBuf),
     ChangePinPosition(usize, usize, Pin),
     NewPin(Option<usize>, Pin),
 
     // Tab
     CreateTab(TabKind, PathBuf),
-    DeleteTab(Tab),
-    ChangeTabDirectory(usize, Tab, Option<PathBuf>),
+    DeleteTab(usize, Tab),
     ChangeTabName(usize, Tab, String),
+    ChangeTabDirectory(usize, Tab, Option<PathBuf>),
     ChangeTabPosition(usize, usize, Tab),
     NewTab(Option<usize>, Tab),
+
+    // Entity
+    CreateEntity(usize, Tab, Entity),
+    ChangeEntityDirectory(usize, Tab, usize, Entity, PathBuf),
+    ChangeEntityName(usize, Tab, usize, Entity, String),
+    ChangeEntityExtension(usize, Tab, usize, Entity, String),
+    ChangeEntityPermissions(usize, Tab, usize, Entity, EntityPermissions),
+    ChangeEntityOwners(usize, Tab, usize, Entity, EntityOwners),
 }
