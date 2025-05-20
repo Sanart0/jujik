@@ -17,6 +17,7 @@ pub enum JujikError {
     Logger(log::SetLoggerError),
     Thread(Box<dyn Any + Send>),
     Nix(nix::errno::Errno),
+    SerdeJson(serde_json::error::Error),
     Other(String),
 }
 
@@ -82,19 +83,26 @@ impl From<nix::errno::Errno> for JujikError {
     }
 }
 
+impl From<serde_json::error::Error> for JujikError {
+    fn from(value: serde_json::error::Error) -> Self {
+        JujikError::SerdeJson(value)
+    }
+}
+
 impl std::error::Error for JujikError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            JujikError::IO(io_error) => Some(io_error),
-            JujikError::Send(_send_error) => None,
-            JujikError::Recv(recv_error) => Some(recv_error),
-            JujikError::TryRecv(try_recv_error) => Some(try_recv_error),
-            JujikError::RecvTimeout(recv_timeout_error) => Some(recv_timeout_error),
-            JujikError::EFrame(eframe_error) => Some(eframe_error),
-            JujikError::Logger(logger_error) => Some(logger_error),
-            JujikError::Thread(_thread_error) => None,
-            JujikError::Nix(nix_error) => Some(nix_error),
-            JujikError::Other(_other_error) => None,
+            JujikError::IO(err) => Some(err),
+            JujikError::Send(_err) => None,
+            JujikError::Recv(err) => Some(err),
+            JujikError::TryRecv(err) => Some(err),
+            JujikError::RecvTimeout(err) => Some(err),
+            JujikError::EFrame(err) => Some(err),
+            JujikError::Logger(err) => Some(err),
+            JujikError::Thread(_err) => None,
+            JujikError::Nix(err) => Some(err),
+            JujikError::SerdeJson(err) => Some(err),
+            JujikError::Other(_err) => None,
             JujikError::None => None,
         }
     }
@@ -117,6 +125,7 @@ impl Display for JujikError {
                 JujikError::Logger(err) => err.to_string(),
                 JujikError::Thread(err) => format!("{:?}", err),
                 JujikError::Nix(err) => err.to_string(),
+                JujikError::SerdeJson(err) => err.to_string(),
                 JujikError::Other(err) => err.to_string(),
                 JujikError::None => "".to_string(),
             }

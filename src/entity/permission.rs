@@ -1,3 +1,4 @@
+use serde::{Deserialize, Serialize};
 use std::{
     fmt::{Debug, Display},
     fs::Permissions,
@@ -18,7 +19,7 @@ pub enum EntityPermissionsCategory {
     Other,
 }
 
-#[derive(PartialEq, Eq, Default, Clone, Hash)]
+#[derive(PartialEq, Eq, Default, Clone, Hash, Serialize, Deserialize)]
 pub struct EntityPermissions {
     mode: u32,
 }

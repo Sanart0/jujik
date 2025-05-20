@@ -1,5 +1,12 @@
-use crate::{commands::Command, error::JujikError, pin::Pin, tab::Tab};
+use crate::{
+    commands::Command,
+    config::{self, Config},
+    error::JujikError,
+    pin::Pin,
+    tab::Tab,
+};
 use std::{
+    fs,
     sync::mpsc::{Receiver, Sender},
     thread::{self, JoinHandle},
     time::{Duration, Instant},
@@ -9,6 +16,7 @@ pub struct JujikController {
     model: Sender<Command>,
     view: Sender<Command>,
     controller: Receiver<Command>,
+    config: Config,
     update: Instant,
     pins: Vec<Pin>,
     tabs: Vec<Tab>,
@@ -22,13 +30,22 @@ impl JujikController {
     ) -> Self {
         //TODO load a pins from cache toml file, and sync saves with view
 
+        let config = match Config::load() {
+            Ok(config) => config,
+            Err(_) => {
+                //TODO Handle error
+                Config::default()
+            }
+        };
+
         Self {
             model,
             view,
             controller,
+            config: config.clone(),
             update: Instant::now(),
-            pins: Vec::new(),
-            tabs: Vec::new(),
+            pins: config.pins(),
+            tabs: config.tabs(),
         }
     }
 
@@ -36,6 +53,8 @@ impl JujikController {
         Ok(thread::Builder::new()
             .name("Controller".to_string())
             .spawn(move || -> Result<(), JujikError> {
+                self.send_config()?;
+
                 'event_loop: loop {
                     if let Ok(command) = self.controller.try_recv() {
                         println!("Controller: {:?}", command);
@@ -94,13 +113,8 @@ impl JujikController {
                             }
 
                             // Tab
-                            Command::CreateTab(tab_kind, mut pathbuf) => {
+                            Command::CreateTab(tab_kind, pathbuf) => {
                                 if pathbuf.exists() {
-                                    if !pathbuf.is_dir() {
-                                        if let Some(parent) = pathbuf.parent() {
-                                            pathbuf = parent.to_path_buf();
-                                        }
-                                    }
                                     self.model.send(Command::CreateTab(tab_kind, pathbuf))?
                                 } else {
                                     self.view.send(Command::Error(Box::new(JujikError::Other(
@@ -178,9 +192,11 @@ impl JujikController {
                                 }
                             }
                             Command::ChangeEntityName(idx_tab, tab, idx_entity, entity, name) => {
-                                self.model.send(Command::ChangeEntityName(
-                                    idx_tab, tab, idx_entity, entity, name,
-                                ))?;
+                                if entity.exists() {
+                                    self.model.send(Command::ChangeEntityName(
+                                        idx_tab, tab, idx_entity, entity, name,
+                                    ))?;
+                                }
                             }
                             Command::ChangeEntityExtension(
                                 idx_tab,
@@ -189,9 +205,11 @@ impl JujikController {
                                 entity,
                                 extension,
                             ) => {
-                                self.model.send(Command::ChangeEntityExtension(
-                                    idx_tab, tab, idx_entity, entity, extension,
-                                ))?;
+                                if entity.exists() {
+                                    self.model.send(Command::ChangeEntityExtension(
+                                        idx_tab, tab, idx_entity, entity, extension,
+                                    ))?;
+                                }
                             }
                             Command::ChangeEntityPermissions(
                                 idx_tab,
@@ -200,13 +218,15 @@ impl JujikController {
                                 entity,
                                 permissions,
                             ) => {
-                                self.model.send(Command::ChangeEntityPermissions(
-                                    idx_tab,
-                                    tab,
-                                    idx_entity,
-                                    entity,
-                                    permissions,
-                                ))?;
+                                if entity.exists() {
+                                    self.model.send(Command::ChangeEntityPermissions(
+                                        idx_tab,
+                                        tab,
+                                        idx_entity,
+                                        entity,
+                                        permissions,
+                                    ))?;
+                                }
                             }
                             Command::ChangeEntityOwners(
                                 idx_tab,
@@ -215,9 +235,24 @@ impl JujikController {
                                 entity,
                                 owners,
                             ) => {
-                                self.model.send(Command::ChangeEntityOwners(
-                                    idx_tab, tab, idx_entity, entity, owners,
-                                ))?;
+                                if entity.exists() {
+                                    self.model.send(Command::ChangeEntityOwners(
+                                        idx_tab, tab, idx_entity, entity, owners,
+                                    ))?;
+                                }
+                            }
+                            Command::ChangeEntityContent(idx, tab, entity, content) => {
+                                if entity.exists() {
+                                    self.model.send(Command::ChangeEntityContent(
+                                        idx, tab, entity, content,
+                                    ))?;
+                                }
+                            }
+
+                            // Config
+                            Command::SetConfig(config) => {
+                                self.config = config;
+                                self.write_config();
                             }
 
                             // Other
@@ -227,6 +262,7 @@ impl JujikController {
                             }
                             Command::Error(err) => self.view.send(Command::Error(err))?,
                             Command::Drop => {
+                                self.write_config();
                                 self.send_drop()?;
                                 break 'event_loop;
                             }
@@ -237,6 +273,7 @@ impl JujikController {
                     if self.update.elapsed() >= Duration::from_secs(5) {
                         self.update_tabs()?;
                         self.sync_view()?;
+                        self.view.send(Command::GetConfig)?;
 
                         self.update = Instant::now();
                     }
@@ -246,6 +283,32 @@ impl JujikController {
 
                 Ok(self.send_drop()?)
             })?)
+    }
+
+    fn write_config(&mut self) {
+        self.config.set_tabs(
+            self.tabs
+                .clone()
+                .into_iter()
+                .map(|mut t| {
+                    t.clear_entitys();
+                    t
+                })
+                .collect(),
+        );
+
+        if let Err(_) = self.config.write() {
+            //TODO Handle error
+        }
+    }
+
+    fn send_config(&mut self) -> Result<(), JujikError> {
+        self.update_tabs()?;
+        self.sync_view()?;
+
+        Ok(self
+            .view
+            .send(Command::SetConfig(self.config.clone()))?)
     }
 
     fn update_tabs(&mut self) -> Result<(), JujikError> {
@@ -268,9 +331,5 @@ impl JujikController {
         let _view_drop = self.view.send(Command::Drop);
         let _model_drop = self.model.send(Command::Drop);
         Ok(())
-    }
-
-    fn read_save(&mut self) {
-        //TODO read a save
     }
 }

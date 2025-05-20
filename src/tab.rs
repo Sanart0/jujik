@@ -1,5 +1,6 @@
 use crate::{entity::Entity, error::JujikError};
-use std::{fs::read_dir, path::PathBuf};
+use serde::{Deserialize, Serialize};
+use std::{fmt::Display, fs::read_dir, path::PathBuf};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum TabKind {
@@ -9,15 +10,15 @@ pub enum TabKind {
     Editor,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub enum TabContent {
     None,
     Entitys(Vec<Entity>),
-    View(PathBuf),
-    Editor(PathBuf),
+    View(Entity),
+    Editor(Entity),
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub struct Tab {
     name: String,
     pathbuf: PathBuf,
@@ -27,12 +28,12 @@ pub struct Tab {
 impl Tab {
     pub fn new(tab_kind: TabKind, pathbuf: PathBuf) -> Result<Self, JujikError> {
         Ok(Self {
-            name: Entity::get_name(pathbuf.as_path())?,
+            name: format!("{}: {}", tab_kind, Entity::get_name(pathbuf.as_path())?),
             pathbuf: pathbuf.clone(),
             content: match tab_kind {
-                TabKind::Entitys => TabContent::Entitys(Tab::read_dir(pathbuf)?),
-                TabKind::View => TabContent::View(pathbuf),
-                TabKind::Editor => TabContent::Editor(pathbuf),
+                TabKind::Entitys => TabContent::Entitys(Tab::read_dir(pathbuf.clone())?),
+                TabKind::View => TabContent::View(Entity::new(pathbuf.clone())?),
+                TabKind::Editor => TabContent::Editor(Entity::new(pathbuf.clone())?),
                 TabKind::None => TabContent::None,
             },
         })
@@ -113,6 +114,12 @@ impl Tab {
         Ok(())
     }
 
+    pub fn clear_entitys(&mut self) {
+        if let Some(entitys) = self.entitys_mut() {
+            entitys.clear();
+        }
+    }
+
     pub fn update_entitys(&mut self) -> Result<(), JujikError> {
         let pathbuf = self.pathbuf.clone();
 
@@ -131,5 +138,20 @@ impl Default for Tab {
             pathbuf: PathBuf::new(),
             content: TabContent::None,
         }
+    }
+}
+
+impl Display for TabKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                TabKind::Entitys => "Entitys",
+                TabKind::View => "View",
+                TabKind::Editor => "Editor",
+                TabKind::None => "None",
+            }
+        )
     }
 }

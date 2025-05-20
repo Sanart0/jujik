@@ -1,3 +1,4 @@
+use crate::config::Config;
 use crate::entity::Entity;
 use crate::entity::kind::EntityKind;
 use crate::entity::owner::EntityOwners;
@@ -8,11 +9,12 @@ use crate::tab::{TabContent, TabKind};
 use crate::{commands::Command, error::JujikError, pin::Pin, tab::Tab};
 use eframe::{App, EventLoopBuilderHook, NativeOptions, run_native};
 use egui::{
-    Align, Button, CentralPanel, Color32, Context, Event, Id, Key, KeyboardShortcut, Label, Layout,
-    Modal, Modifiers, PointerButton, Response, RichText, ScrollArea, Sense, SidePanel, Sides,
-    Stroke, TopBottomPanel, Ui, Visuals, menu,
+    Align, Button, CentralPanel, Color32, Context, Event, Id, Key, Label, Layout, Modal, Modifiers,
+    Response, RichText, ScrollArea, Sense, SidePanel, Sides, Stroke, TextEdit, TextStyle,
+    TopBottomPanel, Ui, Visuals, menu,
 };
 use egui_extras::{Column, TableBuilder};
+use serde::{Deserialize, Serialize};
 use std::{
     collections::HashSet,
     path::PathBuf,
@@ -98,7 +100,14 @@ struct EntitysSelection {
     last_idx: usize,
 }
 
-struct ShowEntitysColumn {
+#[derive(Default)]
+struct EntityEdit {
+    changed: bool,
+    content: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EntitysShowColumn {
     filekind: bool,
     name: bool,
     name_with_extension: bool,
@@ -124,13 +133,61 @@ pub struct JujikView {
     style: JujikStyle,
     pins: Vec<Pin>,
     tabs: Vec<Tab>,
-    entitys_show: ShowEntitysColumn,
+    entitys_show: EntitysShowColumn,
     current_tab_idx: usize,
     entitys_selection: EntitysSelection,
     pin_info: PinInfo,
     tab_info: TabInfo,
     entity_info: EntityInfo,
     entitys_delete: EntitysDelete,
+    entity_edit: EntityEdit,
+}
+
+impl App for JujikView {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        self.style(ctx);
+
+        TopBottomPanel::top("menu").show(ctx, |ui| {
+            self.main_bar(ctx, ui);
+        });
+
+        SidePanel::left("Bind")
+            .width_range(100.0..=300.0)
+            .show(ctx, |ui| {
+                self.pin(ui, ctx);
+            });
+
+        CentralPanel::default().show(ctx, |ui| {
+            TopBottomPanel::top("tab").show_inside(ui, |ui| {
+                self.tab(ui, ctx);
+            });
+            CentralPanel::default().show_inside(ui, |ui| {
+                self.tab_content(ctx, ui);
+            });
+        });
+
+        let _ = self.handle_commad(ctx).inspect_err(JujikError::handle_err);
+
+        //TODO meybe do not need
+        ctx.request_repaint();
+    }
+
+    fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        let _ = self
+            .controller
+            .send(Command::SetConfig(Config::new(
+                self.pins.clone(),
+                self.tabs.clone(),
+                self.current_tab_idx,
+                self.entitys_show.clone(),
+            )))
+            .inspect_err(JujikError::handle_err);
+
+        let _ = self
+            .controller
+            .send(Command::Drop)
+            .inspect_err(JujikError::handle_err);
+    }
 }
 
 impl JujikView {
@@ -141,13 +198,14 @@ impl JujikView {
             view,
             pins: Vec::new(),
             tabs: Vec::new(),
-            entitys_show: ShowEntitysColumn::default(),
+            entitys_show: EntitysShowColumn::default(),
             current_tab_idx: 0,
             entitys_selection: EntitysSelection::default(),
             pin_info: PinInfo::default(),
             tab_info: TabInfo::default(),
             entity_info: EntityInfo::default(),
             entitys_delete: EntitysDelete::default(),
+            entity_edit: EntityEdit::default(),
         }
     }
 
@@ -169,15 +227,28 @@ impl JujikView {
         )?)
     }
 
-    fn write_save(&self) {
-        //TODO write a save
-    }
-
     fn handle_commad(&mut self, ctx: &egui::Context) -> Result<(), JujikError> {
         if let Ok(command) = self.view.try_recv() {
             println!("View: {:?}", command);
 
             match command {
+                // Config
+                Command::GetConfig => {
+                    let _ = self
+                        .controller
+                        .send(Command::SetConfig(Config::new(
+                            self.pins.clone(),
+                            self.tabs.clone(),
+                            self.current_tab_idx,
+                            self.entitys_show.clone(),
+                        )))
+                        .inspect_err(JujikError::handle_err);
+                }
+                Command::SetConfig(config) => {
+                    self.current_tab_idx = config.current_tab_idx();
+                    self.entitys_show = config.entitys_show();
+                }
+
                 // Other
                 Command::Sync(pins, tabs) => {
                     self.pins.clone_from(&pins);
@@ -208,104 +279,70 @@ impl JujikView {
         ctx.set_visuals(visuals);
     }
 
-    fn mesaage(&self) {}
-}
-
-impl App for JujikView {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        self.style(ctx);
-
-        TopBottomPanel::top("menu").show(ctx, |ui| {
-            menu::bar(ui, |ui| {
-                ui.menu_button(
-                    RichText::new("File")
+    fn main_bar(&self, ctx: &Context, ui: &mut Ui) {
+        menu::bar(ui, |ui| {
+            ui.menu_button(
+                RichText::new("File")
+                    .color(self.style.text_color)
+                    .size(self.style.text_size),
+                |ui| {
+                    if ui
+                        .button(
+                            RichText::new("Exit")
+                                .color(self.style.text_color)
+                                .size(self.style.text_size),
+                        )
+                        .clicked()
+                    {
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                    }
+                },
+            );
+            if ui
+                .button(
+                    RichText::new("ROOT")
                         .color(self.style.text_color)
                         .size(self.style.text_size),
-                    |ui| {
-                        if ui
-                            .button(
-                                RichText::new("Exit")
-                                    .color(self.style.text_color)
-                                    .size(self.style.text_size),
-                            )
-                            .clicked()
-                        {
-                            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
-                        }
-                    },
-                );
-                if ui
-                    .button(
-                        RichText::new("ROOT")
-                            .color(self.style.text_color)
-                            .size(self.style.text_size),
-                    )
-                    .clicked()
-                {
-                    let _ = self
-                        .controller
-                        .send(Command::CreatePin(PathBuf::from("/")))
-                        .inspect_err(JujikError::handle_err);
-                }
-                if ui
-                    .button(
-                        RichText::new("HOME")
-                            .color(self.style.text_color)
-                            .size(self.style.text_size),
-                    )
-                    .clicked()
-                {
-                    let _ = self
-                        .controller
-                        .send(Command::CreatePin(PathBuf::from("/home/sanart0/")))
-                        .inspect_err(JujikError::handle_err);
-                }
-                if ui
-                    .button(
-                        RichText::new("TEST")
-                            .color(self.style.text_color)
-                            .size(self.style.text_size),
-                    )
-                    .clicked()
-                {
-                    let _ = self
-                        .controller
-                        .send(Command::CreatePin(PathBuf::from(
-                            "/home/sanart0/KPI/4/IPZ-Kursach/jujik/test/",
-                        )))
-                        .inspect_err(JujikError::handle_err);
-                }
-            });
+                )
+                .clicked()
+            {
+                let _ = self
+                    .controller
+                    .send(Command::CreatePin(PathBuf::from("/")))
+                    .inspect_err(JujikError::handle_err);
+            }
+            if ui
+                .button(
+                    RichText::new("HOME")
+                        .color(self.style.text_color)
+                        .size(self.style.text_size),
+                )
+                .clicked()
+            {
+                let _ = self
+                    .controller
+                    .send(Command::CreatePin(PathBuf::from("/home/sanart0/")))
+                    .inspect_err(JujikError::handle_err);
+            }
+            if ui
+                .button(
+                    RichText::new("TEST")
+                        .color(self.style.text_color)
+                        .size(self.style.text_size),
+                )
+                .clicked()
+            {
+                let _ = self
+                    .controller
+                    .send(Command::CreatePin(PathBuf::from(
+                        "/home/sanart0/KPI/4/IPZ-Kursach/jujik/test/",
+                    )))
+                    .inspect_err(JujikError::handle_err);
+            }
         });
-
-        SidePanel::left("Bind")
-            .width_range(100.0..=300.0)
-            .show(ctx, |ui| {
-                self.pin(ui, ctx);
-            });
-
-        CentralPanel::default().show(ctx, |ui| {
-            TopBottomPanel::top("tab").show_inside(ui, |ui| {
-                self.tab(ui, ctx);
-            });
-            CentralPanel::default().show_inside(ui, |ui| {
-                self.tab_content(ctx, ui);
-            });
-        });
-
-        let _ = self.handle_commad(ctx).inspect_err(JujikError::handle_err);
-
-        //TODO meybe do not need
-        ctx.request_repaint();
     }
 
-    fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
-        Self::write_save(self);
-        let _ = self
-            .controller
-            .send(Command::Drop)
-            .inspect_err(JujikError::handle_err);
-    }
+    fn mesaage(&self) {}
 }
 
 // Pin
@@ -376,15 +413,20 @@ impl JujikView {
                                 .send(Command::ChangePinPosition(idx, idx - 1, pin.clone()))
                                 .inspect_err(JujikError::handle_err);
                         }
+
+                        ui.close_menu();
                     }
 
                     if down.clicked() {
+                        ui.close_menu();
                         if idx < self.pins.len() - 1 {
                             let _ = self
                                 .controller
                                 .send(Command::ChangePinPosition(idx, idx + 1, pin.clone()))
                                 .inspect_err(JujikError::handle_err);
                         }
+
+                        ui.close_menu();
                     }
                 },
             );
@@ -559,22 +601,43 @@ impl JujikView {
     }
 
     fn tab_content(&mut self, ctx: &Context, ui: &mut Ui) {
-        if self.current_tab_idx < self.tabs.len() {
-            if let Some(tab) = self.tabs.get(self.current_tab_idx) {
-                match tab.content() {
-                    TabContent::Entitys(_) => {
-                        ui.horizontal(|ui| {
-                            self.go_prev_directory(ui, tab.clone());
-                            self.tab_path(ui, tab.clone());
-                        });
+        if let Some(tab) = self.tabs.clone().get(self.current_tab_idx) {
+            match tab.content() {
+                TabContent::Entitys(_) => {
+                    self.entitys_bar(ui, tab.clone());
 
-                        ui.separator();
+                    ui.separator();
 
-                        self.table(ctx, ui, self.current_tab_idx, tab.clone())
-                    }
-                    TabContent::Editor(_pathbuf) => todo!(),
-                    _ => {}
+                    self.table(ctx, ui, self.current_tab_idx, tab.clone());
                 }
+                TabContent::View(entity) => {
+                    ui.horizontal(|ui| {
+                        self.view_text_bar(ui, entity);
+                    });
+
+                    ui.separator();
+
+                    self.view_text(ui, entity);
+                }
+                TabContent::Editor(entity) => {
+                    if !self.entity_edit.changed {
+                        self.entity_edit.content = match entity.content() {
+                            Ok(content) => content,
+                            Err(_) => String::new(),
+                        };
+
+                        self.entity_edit.changed = true;
+                    }
+
+                    ui.horizontal(|ui| {
+                        self.edit_text_bar(ui, entity);
+                    });
+
+                    ui.separator();
+
+                    self.edit_text(ui);
+                }
+                _ => {}
             }
         }
     }
@@ -845,6 +908,17 @@ impl JujikView {
 
     fn tab_context_menu(&mut self, ui: &mut Ui, response: &Response, idx: usize, tab: &Tab) {
         response.context_menu(|ui| {
+            let create_pin = ui.button(
+                RichText::new("Create Pin")
+                    .color(self.style.text_color)
+                    .size(self.style.text_size),
+            );
+            let paste = ui.button(
+                RichText::new("Paste")
+                    .color(self.style.text_color)
+                    .size(self.style.text_size),
+            );
+
             let _position = ui.menu_button(
                 RichText::new("Position")
                     .color(self.style.text_color)
@@ -863,25 +937,33 @@ impl JujikView {
                     );
 
                     if left.clicked() {
-                        if self.current_tab_idx > 0 {
+                        if idx > 0 {
                             let _ = self
                                 .controller
                                 .send(Command::ChangeTabPosition(idx, idx - 1, tab.clone()))
                                 .inspect_err(JujikError::handle_err);
-
-                            self.current_tab_idx = idx - 1;
                         }
+
+                        if (self.current_tab_idx as isize - idx as isize).abs() <= 1 {
+                            self.current_tab_idx += 1;
+                        }
+
+                        ui.close_menu();
                     }
 
                     if right.clicked() {
-                        if self.current_tab_idx < self.tabs.len() - 1 {
+                        if idx < self.tabs.len() - 1 {
                             let _ = self
                                 .controller
                                 .send(Command::ChangeTabPosition(idx, idx + 1, tab.clone()))
                                 .inspect_err(JujikError::handle_err);
 
-                            self.current_tab_idx = idx + 1;
+                            if (self.current_tab_idx as isize - idx as isize).abs() <= 1 {
+                                self.current_tab_idx -= 1;
+                            }
                         }
+
+                        ui.close_menu();
                     }
                 },
             );
@@ -898,11 +980,29 @@ impl JujikView {
                     .size(self.style.text_size),
             );
 
+            if create_pin.clicked() {
+                let _ = self
+                    .controller
+                    .send(Command::CreatePin(tab.path()))
+                    .inspect_err(JujikError::handle_err);
+            }
+
+            if paste.clicked() {
+                self.entitys_selection
+                    .paste(self.controller.clone(), tab.path());
+
+                ui.close_menu();
+            }
+
             if delete.clicked() {
                 let _ = self
                     .controller
                     .send(Command::DeleteTab(idx, tab.clone()))
                     .inspect_err(JujikError::handle_err);
+
+                if self.current_tab_idx != 0 && self.current_tab_idx >= idx && self.tabs.len() > 1 {
+                    self.current_tab_idx -= 1;
+                }
 
                 ui.close_menu();
             }
@@ -1009,44 +1109,112 @@ impl JujikView {
         }
     }
 
-    fn go_next_directory(&self, tab: &Tab, pathbuf: PathBuf) {
-        let _ = self
-            .controller
-            .send(Command::ChangeTabDirectory(
-                self.current_tab_idx,
-                tab.clone(),
-                Some(pathbuf),
-            ))
-            .inspect_err(JujikError::handle_err);
+    fn entitys_bar(&self, ui: &mut Ui, tab: Tab) {
+        ui.horizontal(|ui| {
+            let back = ui.add(Button::new(
+                RichText::new("Back")
+                    .color(self.style.text_color)
+                    .size(self.style.text_size),
+            ));
+
+            if back.clicked() {
+                let _ = self
+                    .controller
+                    .send(Command::ChangeTabDirectory(
+                        self.current_tab_idx,
+                        tab.clone(),
+                        None,
+                    ))
+                    .inspect_err(JujikError::handle_err);
+            }
+
+            let path = ui.add(
+                Label::new(
+                    RichText::new(format!("{}", tab.path_str()))
+                        .color(self.style.text_color)
+                        .size(self.style.text_size),
+                )
+                .selectable(false)
+                .sense(Sense::click()),
+            );
+
+            if path.clicked() {}
+        });
     }
 
-    fn go_prev_directory(&self, ui: &mut Ui, tab: Tab) {
-        let tab_back = ui.add(Button::new(
-            RichText::new("Back")
-                .color(self.style.text_color)
-                .size(self.style.text_size),
-        ));
+    fn view_text_bar(&self, ui: &mut Ui, entity: &Entity) {
+        ui.horizontal(|ui| {
+            let path = ui.add(
+                Label::new(
+                    RichText::new(format!("{}", entity.path_str()))
+                        .color(self.style.text_color)
+                        .size(self.style.text_size),
+                )
+                .selectable(false)
+                .sense(Sense::click()),
+            );
 
-        if tab_back.clicked() || ui.input(|i| i.pointer.button_clicked(PointerButton::Extra1)) {
-            let _ = self
-                .controller
-                .send(Command::ChangeTabDirectory(self.current_tab_idx, tab, None))
-                .inspect_err(JujikError::handle_err);
+            if path.clicked() {}
+        });
+    }
+
+    fn edit_text_bar(&mut self, ui: &mut Ui, entity: &Entity) {
+        ui.horizontal(|ui| {
+            let save = ui.button(
+                RichText::new("Save")
+                    .color(self.style.text_color)
+                    .size(self.style.text_size),
+            );
+
+            let path = ui.add(
+                Label::new(
+                    RichText::new(format!("{}", entity.path_str()))
+                        .color(self.style.text_color)
+                        .size(self.style.text_size),
+                )
+                .selectable(false)
+                .sense(Sense::click()),
+            );
+
+            if path.clicked() {}
+
+            if save.clicked() {
+                let _ = self
+                    .controller
+                    .send(Command::ChangeEntityContent(
+                        0,
+                        Tab::default(),
+                        entity.clone(),
+                        self.entity_edit.content.clone(),
+                    ))
+                    .inspect_err(JujikError::handle_err);
+
+                self.entity_edit.changed = false;
+            }
+        });
+    }
+
+    fn view_text(&self, ui: &mut Ui, entity: &Entity) {
+        match entity.content() {
+            Ok(content) => {
+                ScrollArea::both().show(ui, |ui| {
+                    ui.label(
+                        RichText::new(format!("{}", content))
+                            .color(self.style.text_color)
+                            .size(self.style.text_size),
+                    );
+                });
+            }
+            Err(err) => {
+                //TODO Handle error
+            }
         }
     }
 
-    fn tab_path(&self, ui: &mut Ui, tab: Tab) {
-        let tab_path = ui.add(
-            Label::new(
-                RichText::new(format!("{}", tab.path_str()))
-                    .color(self.style.text_color)
-                    .size(self.style.text_size),
-            )
-            .selectable(false)
-            .sense(Sense::click()),
-        );
-
-        if tab_path.clicked() {}
+    fn edit_text(&mut self, ui: &mut Ui) {
+        ScrollArea::both().show(ui, |ui| {
+            ui.add(TextEdit::multiline(&mut self.entity_edit.content).font(TextStyle::Heading));
+        });
     }
 }
 
@@ -1061,11 +1229,73 @@ impl JujikView {
         entity: &Entity,
     ) {
         response.context_menu(|ui| {
-            let open = ui.button(
-                RichText::new("Open")
-                    .color(self.style.text_color)
-                    .size(self.style.text_size),
-            );
+            if entity.is_dir() {
+                let open = ui.button(
+                    RichText::new("Open")
+                        .color(self.style.text_color)
+                        .size(self.style.text_size),
+                );
+
+                let open_new_tab = ui.button(
+                    RichText::new("Open in new Tab")
+                        .color(self.style.text_color)
+                        .size(self.style.text_size),
+                );
+
+                if open.clicked() {
+                    let _ = self
+                        .controller
+                        .send(Command::ChangeTabDirectory(
+                            self.current_tab_idx,
+                            tab.clone(),
+                            Some(entity.path()),
+                        ))
+                        .inspect_err(JujikError::handle_err);
+
+                    ui.close_menu();
+                }
+
+                if open_new_tab.clicked() {
+                    let _ = self
+                        .controller
+                        .send(Command::CreateTab(TabKind::Entitys, entity.path()))
+                        .inspect_err(JujikError::handle_err);
+
+                    ui.close_menu();
+                }
+            } else {
+                let view = ui.button(
+                    RichText::new("View")
+                        .color(self.style.text_color)
+                        .size(self.style.text_size),
+                );
+
+                let edit = ui.button(
+                    RichText::new("Edit")
+                        .color(self.style.text_color)
+                        .size(self.style.text_size),
+                );
+
+                if view.clicked() {
+                    let _ = self
+                        .controller
+                        .send(Command::CreateTab(TabKind::View, entity.path()))
+                        .inspect_err(JujikError::handle_err);
+
+                    ui.close_menu();
+                }
+
+                if edit.clicked() {
+                    if entity.is_file() {
+                        let _ = self
+                            .controller
+                            .send(Command::CreateTab(TabKind::Editor, entity.path()))
+                            .inspect_err(JujikError::handle_err);
+                    }
+
+                    ui.close_menu();
+                }
+            }
 
             let select = ui.button(
                 RichText::new("Select")
@@ -1085,8 +1315,8 @@ impl JujikView {
                     .size(self.style.text_size),
             );
 
-            let paste = ui.button(
-                RichText::new("Paste")
+            let create_pin = ui.button(
+                RichText::new("Create Pin")
                     .color(self.style.text_color)
                     .size(self.style.text_size),
             );
@@ -1102,12 +1332,6 @@ impl JujikView {
                     .color(self.style.text_color)
                     .size(self.style.text_size),
             );
-
-            if open.clicked() {
-                self.go_next_directory(tab, entity.path());
-
-                ui.close_menu();
-            }
 
             if select.clicked() {
                 if self.entitys_selection.entitys.contains(entity) {
@@ -1131,8 +1355,18 @@ impl JujikView {
                 ui.close_menu();
             }
 
-            if paste.clicked() {
-                self.entitys_selection.paste(self.controller.clone(), tab.path());
+            if create_pin.clicked() {
+                if entity.is_dir() {
+                    let _ = self
+                        .controller
+                        .send(Command::CreatePin(entity.path()))
+                        .inspect_err(JujikError::handle_err);
+                } else {
+                    let _ = self
+                        .controller
+                        .send(Command::CreatePin(entity.path_dir()))
+                        .inspect_err(JujikError::handle_err);
+                }
 
                 ui.close_menu();
             }
@@ -2003,7 +2237,7 @@ impl EntitysSelection {
     }
 }
 
-impl Default for ShowEntitysColumn {
+impl Default for EntitysShowColumn {
     fn default() -> Self {
         Self {
             filekind: true,

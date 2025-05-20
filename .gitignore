@@ -3,11 +3,9 @@ test/
 debug/
 target/
 
-Cargo.lock
-
+**/*.lock
 **/*.rs.bk
-
-*.pdb
+**/*.pdb
 
 **/*.log
-
+**/*.json

@@ -6,14 +6,16 @@ use crate::error::JujikError;
 use kind::EntityKind;
 use owner::EntityOwners;
 use permission::EntityPermissions;
+use serde::{Deserialize, Serialize};
 use std::{
     fmt::Display,
-    fs::{canonicalize, symlink_metadata},
+    fs::{File, canonicalize, symlink_metadata},
+    io::Read,
     os::unix::fs::{FileTypeExt, MetadataExt},
     path::{Path, PathBuf},
 };
 
-#[derive(Debug, Default, PartialEq, Eq, Clone, Hash)]
+#[derive(Debug, Default, PartialEq, Eq, Clone, Hash, Serialize, Deserialize)]
 pub struct Entity {
     global_path: PathBuf,
     name: String,
@@ -64,22 +66,6 @@ impl Entity {
             permissions,
             owners: EntityOwners::current()?,
         })
-    }
-
-    pub fn is_file(&self) -> bool {
-        if let EntityKind::File = self.kind {
-            true
-        } else {
-            false
-        }
-    }
-
-    pub fn is_dir(&self) -> bool {
-        if let EntityKind::File = self.kind {
-            true
-        } else {
-            false
-        }
     }
 }
 
@@ -152,6 +138,35 @@ impl Entity {
     pub fn owners(&self) -> &EntityOwners {
         &self.owners
     }
+
+    pub fn exists(&self) -> bool {
+        self.path().exists()
+    }
+
+    pub fn is_file(&self) -> bool {
+        if let EntityKind::File = self.kind {
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn is_dir(&self) -> bool {
+        if let EntityKind::Directory = self.kind {
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn content(&self) -> Result<String, JujikError> {
+        let mut file = File::open(self.path())?;
+        let mut content = String::new();
+
+        file.read_to_string(&mut content)?;
+
+        Ok(content)
+    }
 }
 
 impl Entity {
@@ -162,7 +177,6 @@ impl Entity {
         }
     }
     pub fn get_name(path: &Path) -> Result<String, JujikError> {
-        //TODO PathBuf::file_stem maybe ???
         if let Some(name) = path.file_stem().and_then(|n| n.to_str()) {
             Ok(name.to_string())
         } else if let Some(path_str) = path.to_str() {

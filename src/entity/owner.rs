@@ -2,8 +2,9 @@ use std::fmt::{Debug, Display};
 
 use crate::error::JujikError;
 use nix::unistd::{Gid, Group, Uid, User, getgid, getuid};
+use serde::{Deserialize, Serialize};
 
-#[derive(PartialEq, Eq, Default, Clone, Hash)]
+#[derive(PartialEq, Eq, Default, Clone, Hash, Serialize, Deserialize)]
 pub struct EntityOwners {
     uid: u32,
     gid: u32,

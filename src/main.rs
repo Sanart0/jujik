@@ -4,7 +4,13 @@ use jujik::{
 };
 use log::LevelFilter;
 use simplelog::{ColorChoice, CombinedLogger, Config, TermLogger, TerminalMode, WriteLogger};
-use std::{env::current_dir, fs::{self, File}, process, sync::mpsc};
+use std::{
+    env::current_dir,
+    fs::{self, File},
+    io::Write,
+    process,
+    sync::mpsc,
+};
 
 fn main() -> Result<(), JujikError> {
     CombinedLogger::init(vec![
@@ -21,21 +27,7 @@ fn main() -> Result<(), JujikError> {
         ),
     ])?;
 
-
-    let _ = fs::remove_dir_all("/home/sanart0/KPI/4/IPZ-Kursach/jujik/test/");
-    let _ = process::Command::new("mkdir").arg("test/").output();
-    let _ = process::Command::new("touch").arg("test/test_1").output();
-    let _ = process::Command::new("touch").arg("test/test_2").output();
-    let _ = process::Command::new("touch").arg("test/test_3").output();
-    let _ = process::Command::new("mkdir")
-        .arg("test/test_dir_1")
-        .output();
-    let _ = process::Command::new("touch")
-        .arg("test/test_dir_1/test_4")
-        .output();
-    let _ = process::Command::new("touch")
-        .arg("test/test_dir_1/test_5")
-        .output();
+    test();
 
     let (controller_tx, controller_rx) = mpsc::channel::<Command>();
     let (model_tx, model_rx) = mpsc::channel::<Command>();
@@ -54,4 +46,43 @@ fn main() -> Result<(), JujikError> {
     view_handler?.join()??;
 
     Ok(())
+}
+
+fn test() {
+    fs::remove_dir_all("/home/sanart0/KPI/4/IPZ-Kursach/jujik/test/").unwrap();
+
+    process::Command::new("mkdir")
+        .arg("test/")
+        .output()
+        .unwrap();
+
+    process::Command::new("touch")
+        .arg("test/test_1.txt")
+        .output()
+        .unwrap();
+    process::Command::new("touch")
+        .arg("test/test_2")
+        .output()
+        .unwrap();
+    process::Command::new("touch")
+        .arg("test/test_3")
+        .output()
+        .unwrap();
+
+    process::Command::new("mkdir")
+        .arg("test/test_dir_1")
+        .output()
+        .unwrap();
+
+    process::Command::new("touch")
+        .arg("test/test_dir_1/test_4")
+        .output()
+        .unwrap();
+    process::Command::new("touch")
+        .arg("test/test_dir_1/test_5")
+        .output()
+        .unwrap();
+
+    fs::write("test/test_1.txt", "Some Text Content").unwrap();
+    fs::write("test/test_2", "Some Text Content\nWith New Line").unwrap();
 }

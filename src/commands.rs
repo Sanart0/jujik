@@ -1,4 +1,5 @@
 use crate::{
+    config::Config,
     entity::{Entity, owner::EntityOwners, permission::EntityPermissions},
     pin::Pin,
     tab::{Tab, TabKind},
@@ -12,6 +13,10 @@ pub enum Command {
     Error(Box<dyn Debug + Send>),
     Sync(Vec<Pin>, Vec<Tab>),
     Uptade,
+
+    // Config
+    GetConfig,
+    SetConfig(Config),
 
     // Pin
     CreatePin(PathBuf),
@@ -38,4 +43,5 @@ pub enum Command {
     ChangeEntityExtension(usize, Tab, usize, Entity, String),
     ChangeEntityPermissions(usize, Tab, usize, Entity, EntityPermissions),
     ChangeEntityOwners(usize, Tab, usize, Entity, EntityOwners),
+    ChangeEntityContent(usize, Tab, Entity, String),
 }

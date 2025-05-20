@@ -1,14 +1,19 @@
 use crate::{entity::Entity, error::JujikError};
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Pin {
     name: String,
     pathbuf: PathBuf,
 }
 
 impl Pin {
-    pub fn new(pathbuf: PathBuf) -> Result<Self, JujikError> {
+    pub fn new(name: String, pathbuf: PathBuf) -> Self {
+        Self { name, pathbuf }
+    }
+
+    pub fn from_path(pathbuf: PathBuf) -> Result<Self, JujikError> {
         Ok(Self {
             name: Entity::get_name(pathbuf.as_path())?,
             pathbuf,

@@ -1,6 +1,7 @@
 use crate::{commands::Command, error::JujikError, pin::Pin, tab::Tab};
 use std::{
-    fs,
+    fs::{self, File},
+    io::Write,
     os::unix,
     sync::mpsc::{Receiver, Sender},
     thread::{self, JoinHandle},
@@ -16,7 +17,7 @@ impl JujikModel {
         Self { controller, model }
     }
 
-    pub fn run(mut self) -> Result<JoinHandle<Result<(), JujikError>>, JujikError> {
+    pub fn run(self) -> Result<JoinHandle<Result<(), JujikError>>, JujikError> {
         Ok(thread::Builder::new().name("Model".to_string()).spawn(
             move || -> Result<(), JujikError> {
                 'event_loop: loop {
@@ -26,7 +27,8 @@ impl JujikModel {
                         match command {
                             // Pin
                             Command::CreatePin(pathbuf) => {
-                                let new_pin = Pin::new(pathbuf);
+                                let new_pin = Pin::from_path(pathbuf);
+
                                 match new_pin {
                                     Ok(new_pin) => {
                                         self.controller.send(Command::NewPin(None, new_pin))?;
@@ -50,6 +52,7 @@ impl JujikModel {
                             // Tab
                             Command::CreateTab(tab_kind, pathbuf) => {
                                 let new_tab = Tab::new(tab_kind, pathbuf);
+
                                 match new_tab {
                                     Ok(new_tab) => {
                                         self.controller.send(Command::NewTab(None, new_tab))?;
@@ -86,9 +89,9 @@ impl JujikModel {
                             Command::DeleteEntitys(idx, tab, entitys) => {
                                 for entity in entitys {
                                     let res = if entity.is_dir() {
-                                        fs::remove_file(entity.path())
-                                    } else {
                                         fs::remove_dir_all(entity.path())
+                                    } else {
+                                        fs::remove_file(entity.path())
                                     };
 
                                     if let Err(_) = res {
@@ -183,6 +186,15 @@ impl JujikModel {
                                     Some(owners.uid()),
                                     Some(owners.gid()),
                                 );
+
+                                if let Err(_) = res {
+                                    //TODO Handle error
+                                } else {
+                                    self.controller.send(Command::Uptade)?;
+                                }
+                            }
+                            Command::ChangeEntityContent(idx, tab, entity, content) => {
+                                let res = fs::write(entity.path(), content);
 
                                 if let Err(_) = res {
                                     //TODO Handle error
