@@ -100,7 +100,10 @@ impl JujikModel {
                             }
                             Command::CopyEntitys(idx_tab, tab, idx_entity, entitys, pathbuf) => {
                                 for entity in entitys {
-                                    let res = fs::copy(entity.path(), pathbuf.clone());
+                                    let mut pathbuf = pathbuf.clone();
+                                    pathbuf.push(entity.name_with_extension());
+
+                                    let res = fs::copy(entity.path(), pathbuf);
 
                                     if let Err(_) = res {
                                         //TODO Handle error
@@ -111,6 +114,9 @@ impl JujikModel {
                             }
                             Command::MoveEntitys(idx_tab, tab, idx_entity, entitys, pathbuf) => {
                                 for entity in entitys {
+                                    let mut pathbuf = pathbuf.clone();
+                                    pathbuf.push(entity.name_with_extension());
+
                                     let res = fs::rename(entity.path(), pathbuf.clone());
 
                                     if let Err(_) = res {

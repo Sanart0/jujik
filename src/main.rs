@@ -4,7 +4,7 @@ use jujik::{
 };
 use log::LevelFilter;
 use simplelog::{ColorChoice, CombinedLogger, Config, TermLogger, TerminalMode, WriteLogger};
-use std::{env::current_dir, fs::File, process, sync::mpsc};
+use std::{env::current_dir, fs::{self, File}, process, sync::mpsc};
 
 fn main() -> Result<(), JujikError> {
     CombinedLogger::init(vec![
@@ -21,6 +21,9 @@ fn main() -> Result<(), JujikError> {
         ),
     ])?;
 
+
+    let _ = fs::remove_dir_all("/home/sanart0/KPI/4/IPZ-Kursach/jujik/test/");
+    let _ = process::Command::new("mkdir").arg("test/").output();
     let _ = process::Command::new("touch").arg("test/test_1").output();
     let _ = process::Command::new("touch").arg("test/test_2").output();
     let _ = process::Command::new("touch").arg("test/test_3").output();

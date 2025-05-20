@@ -87,8 +87,8 @@ struct EntityChangeOwners {
 enum EntitysMoveKind {
     #[default]
     Select,
-    Copy,
-    Cut,
+    Copy(Vec<Entity>),
+    Cut(Vec<Entity>),
 }
 
 #[derive(Default)]
@@ -1073,6 +1073,24 @@ impl JujikView {
                     .size(self.style.text_size),
             );
 
+            let copy = ui.button(
+                RichText::new("Copy")
+                    .color(self.style.text_color)
+                    .size(self.style.text_size),
+            );
+
+            let cut = ui.button(
+                RichText::new("Cut")
+                    .color(self.style.text_color)
+                    .size(self.style.text_size),
+            );
+
+            let paste = ui.button(
+                RichText::new("Paste")
+                    .color(self.style.text_color)
+                    .size(self.style.text_size),
+            );
+
             let delete = ui.button(
                 RichText::new("Delete")
                     .color(self.style.text_color)
@@ -1092,6 +1110,30 @@ impl JujikView {
             }
 
             if select.clicked() {
+                if self.entitys_selection.entitys.contains(entity) {
+                    self.entitys_selection.entitys.remove(entity);
+                } else {
+                    self.entitys_selection.entitys.insert(entity.clone());
+                }
+
+                ui.close_menu();
+            }
+
+            if copy.clicked() {
+                self.entitys_selection.copy();
+
+                ui.close_menu();
+            }
+
+            if cut.clicked() {
+                self.entitys_selection.cut();
+
+                ui.close_menu();
+            }
+
+            if paste.clicked() {
+                self.entitys_selection.paste(self.controller.clone(), tab.path());
+
                 ui.close_menu();
             }
 
@@ -1887,8 +1929,7 @@ impl JujikView {
                 }
             )
         }) {
-            self.entitys_selection.move_kind = EntitysMoveKind::Copy;
-            println!("\nCopy: {:?}\n", self.entitys_selection.entitys_vec())
+            self.entitys_selection.copy();
         }
 
         if events.iter().any(|e| {
@@ -1901,8 +1942,7 @@ impl JujikView {
                 }
             )
         }) {
-            self.entitys_selection.move_kind = EntitysMoveKind::Cut;
-            println!("\nCut: {:?}\n", self.entitys_selection.entitys_vec())
+            self.entitys_selection.cut();
         }
 
         if events.iter().any(|e| {
@@ -1915,37 +1955,8 @@ impl JujikView {
                 }
             )
         }) {
-            match self.entitys_selection.move_kind {
-                EntitysMoveKind::Copy => {
-                    let _ = self
-                        .controller
-                        .send(Command::CopyEntitys(
-                            0,
-                            Tab::default(),
-                            0,
-                            self.entitys_selection.entitys_vec(),
-                            pathbuf.clone(),
-                        ))
-                        .inspect_err(JujikError::handle_err);
-
-                    println!("\nCopy to {:?}\n", pathbuf);
-                }
-                EntitysMoveKind::Cut => {
-                    let _ = self
-                        .controller
-                        .send(Command::MoveEntitys(
-                            0,
-                            Tab::default(),
-                            0,
-                            self.entitys_selection.entitys_vec(),
-                            pathbuf.clone(),
-                        ))
-                        .inspect_err(JujikError::handle_err);
-
-                    println!("\nCut to {:?}\n", pathbuf);
-                }
-                _ => {}
-            }
+            self.entitys_selection
+                .paste(self.controller.clone(), pathbuf);
         }
     }
 }
@@ -1953,6 +1964,42 @@ impl JujikView {
 impl EntitysSelection {
     fn entitys_vec(&self) -> Vec<Entity> {
         self.entitys.clone().into_iter().collect()
+    }
+
+    fn copy(&mut self) {
+        self.move_kind = EntitysMoveKind::Copy(self.entitys_vec());
+    }
+
+    fn cut(&mut self) {
+        self.move_kind = EntitysMoveKind::Cut(self.entitys_vec());
+    }
+
+    fn paste(&mut self, controller: Sender<Command>, pathbuf: PathBuf) {
+        match &self.move_kind {
+            EntitysMoveKind::Copy(entitys) => {
+                let _ = controller
+                    .send(Command::CopyEntitys(
+                        0,
+                        Tab::default(),
+                        0,
+                        entitys.clone(),
+                        pathbuf.clone(),
+                    ))
+                    .inspect_err(JujikError::handle_err);
+            }
+            EntitysMoveKind::Cut(entitys) => {
+                let _ = controller
+                    .send(Command::MoveEntitys(
+                        0,
+                        Tab::default(),
+                        0,
+                        entitys.clone(),
+                        pathbuf.clone(),
+                    ))
+                    .inspect_err(JujikError::handle_err);
+            }
+            _ => {}
+        }
     }
 }
 
