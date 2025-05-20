@@ -4,7 +4,7 @@ use jujik::{
 };
 use log::LevelFilter;
 use simplelog::{ColorChoice, CombinedLogger, Config, TermLogger, TerminalMode, WriteLogger};
-use std::{fs::File, sync::mpsc};
+use std::{env::current_dir, fs::File, process, sync::mpsc};
 
 fn main() -> Result<(), JujikError> {
     CombinedLogger::init(vec![
@@ -20,6 +20,19 @@ fn main() -> Result<(), JujikError> {
             File::create("log.log")?,
         ),
     ])?;
+
+    let _ = process::Command::new("touch").arg("test/test_1").output();
+    let _ = process::Command::new("touch").arg("test/test_2").output();
+    let _ = process::Command::new("touch").arg("test/test_3").output();
+    let _ = process::Command::new("mkdir")
+        .arg("test/test_dir_1")
+        .output();
+    let _ = process::Command::new("touch")
+        .arg("test/test_dir_1/test_4")
+        .output();
+    let _ = process::Command::new("touch")
+        .arg("test/test_dir_1/test_5")
+        .output();
 
     let (controller_tx, controller_rx) = mpsc::channel::<Command>();
     let (model_tx, model_rx) = mpsc::channel::<Command>();

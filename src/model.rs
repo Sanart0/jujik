@@ -1,5 +1,7 @@
 use crate::{commands::Command, error::JujikError, pin::Pin, tab::Tab};
 use std::{
+    fs,
+    os::unix,
     sync::mpsc::{Receiver, Sender},
     thread::{self, JoinHandle},
 };
@@ -14,7 +16,7 @@ impl JujikModel {
         Self { controller, model }
     }
 
-    pub fn run(self) -> Result<JoinHandle<Result<(), JujikError>>, JujikError> {
+    pub fn run(mut self) -> Result<JoinHandle<Result<(), JujikError>>, JujikError> {
         Ok(thread::Builder::new().name("Model".to_string()).spawn(
             move || -> Result<(), JujikError> {
                 'event_loop: loop {
@@ -80,6 +82,108 @@ impl JujikModel {
                             }
 
                             // Entity
+                            Command::CreateEntity(idx, tab, entity_ghost) => {}
+                            Command::DeleteEntitys(idx, tab, entitys) => {
+                                for entity in entitys {
+                                    let res = if entity.is_dir() {
+                                        fs::remove_file(entity.path())
+                                    } else {
+                                        fs::remove_dir_all(entity.path())
+                                    };
+
+                                    if let Err(_) = res {
+                                        //TODO Handle error
+                                    }
+                                }
+
+                                self.controller.send(Command::Uptade)?;
+                            }
+                            Command::CopyEntitys(idx_tab, tab, idx_entity, entitys, pathbuf) => {
+                                for entity in entitys {
+                                    let res = fs::copy(entity.path(), pathbuf.clone());
+
+                                    if let Err(_) = res {
+                                        //TODO Handle error
+                                    }
+                                }
+
+                                self.controller.send(Command::Uptade)?;
+                            }
+                            Command::MoveEntitys(idx_tab, tab, idx_entity, entitys, pathbuf) => {
+                                for entity in entitys {
+                                    let res = fs::rename(entity.path(), pathbuf.clone());
+
+                                    if let Err(_) = res {
+                                        //TODO Handle error
+                                    }
+                                }
+
+                                self.controller.send(Command::Uptade)?;
+                            }
+                            Command::ChangeEntityName(idx_tab, tab, idx_entity, entity, name) => {
+                                let mut path = entity.path_dir();
+                                path.push(name);
+
+                                let res = fs::rename(entity.path(), path);
+
+                                if let Err(_) = res {
+                                    //TODO Handle error
+                                } else {
+                                    self.controller.send(Command::Uptade)?;
+                                }
+                            }
+                            Command::ChangeEntityExtension(
+                                idx_tab,
+                                tab,
+                                idx_entity,
+                                entity,
+                                extension,
+                            ) => {
+                                let mut path = entity.path_dir();
+                                path.push(entity.name_with_extension() + extension.as_str());
+
+                                let res = fs::rename(entity.path(), path);
+
+                                if let Err(_) = res {
+                                    //TODO Handle error
+                                } else {
+                                    self.controller.send(Command::Uptade)?;
+                                }
+                            }
+                            Command::ChangeEntityPermissions(
+                                idx_tab,
+                                tab,
+                                idx_entity,
+                                entity,
+                                permissions,
+                            ) => {
+                                let res = fs::set_permissions(entity.path(), permissions.into());
+
+                                if let Err(_) = res {
+                                    //TODO Handle error
+                                } else {
+                                    self.controller.send(Command::Uptade)?;
+                                }
+                            }
+                            Command::ChangeEntityOwners(
+                                idx_tab,
+                                tab,
+                                idx_entity,
+                                entity,
+                                owners,
+                            ) => {
+                                let res = unix::fs::chown(
+                                    entity.path(),
+                                    Some(owners.uid()),
+                                    Some(owners.gid()),
+                                );
+
+                                if let Err(_) = res {
+                                    //TODO Handle error
+                                } else {
+                                    self.controller.send(Command::Uptade)?;
+                                }
+                            }
 
                             // Other
                             Command::Drop => break 'event_loop,
@@ -90,10 +194,13 @@ impl JujikModel {
                     std::thread::sleep(std::time::Duration::from_millis(8));
                 }
 
-                self.controller.send(Command::Drop)?;
-
-                Ok(())
+                Ok(self.send_drop()?)
             },
         )?)
+    }
+
+    fn send_drop(&self) -> Result<(), JujikError> {
+        let _controller_drop = self.controller.send(Command::Drop);
+        Ok(())
     }
 }

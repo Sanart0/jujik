@@ -2,12 +2,14 @@ use crate::{commands::Command, error::JujikError, pin::Pin, tab::Tab};
 use std::{
     sync::mpsc::{Receiver, Sender},
     thread::{self, JoinHandle},
+    time::{Duration, Instant},
 };
 
 pub struct JujikController {
     model: Sender<Command>,
     view: Sender<Command>,
     controller: Receiver<Command>,
+    update: Instant,
     pins: Vec<Pin>,
     tabs: Vec<Tab>,
 }
@@ -24,6 +26,7 @@ impl JujikController {
             model,
             view,
             controller,
+            update: Instant::now(),
             pins: Vec::new(),
             tabs: Vec::new(),
         }
@@ -122,11 +125,9 @@ impl JujikController {
                                     .send(Command::ChangeTabDirectory(idx, tab, pathbuf))?;
                             }
                             Command::ChangeTabPosition(from, to, tab) => {
-                                if from < self.tabs.len() && to < self.tabs.len() {
-                                    let tab_temp = self.tabs[to].clone();
-                                    self.tabs[to] = tab.clone();
-                                    self.tabs[from] = tab_temp;
-                                }
+                                let tab_temp = self.tabs[to].clone();
+                                self.tabs[to] = tab.clone();
+                                self.tabs[from] = tab_temp;
 
                                 self.sync_view()?;
                             }
@@ -143,8 +144,87 @@ impl JujikController {
                             }
 
                             // Entity
+                            Command::CreateEntity(idx, tab, entity_ghost) => {
+                                self.model
+                                    .send(Command::CreateEntity(idx, tab, entity_ghost))?;
+                            }
+                            Command::DeleteEntitys(idx, tab, entitys) => {
+                                self.model.send(Command::DeleteEntitys(idx, tab, entitys))?;
+                            }
+                            Command::CopyEntitys(idx_tab, tab, idx_entity, entitys, pathbuf) => {
+                                if pathbuf.exists() {
+                                    if pathbuf.is_dir() {
+                                        self.model.send(Command::CopyEntitys(
+                                            idx_tab, tab, idx_entity, entitys, pathbuf,
+                                        ))?;
+                                    } else {
+                                        //TODO hande error path does not a directory
+                                    }
+                                } else {
+                                    //TODO hande error path does not exist
+                                }
+                            }
+                            Command::MoveEntitys(idx_tab, tab, idx_entity, entitys, pathbuf) => {
+                                if pathbuf.exists() {
+                                    if pathbuf.is_dir() {
+                                        self.model.send(Command::MoveEntitys(
+                                            idx_tab, tab, idx_entity, entitys, pathbuf,
+                                        ))?;
+                                    } else {
+                                        //TODO hande error path does not a directory
+                                    }
+                                } else {
+                                    //TODO hande error path does not exist
+                                }
+                            }
+                            Command::ChangeEntityName(idx_tab, tab, idx_entity, entity, name) => {
+                                self.model.send(Command::ChangeEntityName(
+                                    idx_tab, tab, idx_entity, entity, name,
+                                ))?;
+                            }
+                            Command::ChangeEntityExtension(
+                                idx_tab,
+                                tab,
+                                idx_entity,
+                                entity,
+                                extension,
+                            ) => {
+                                self.model.send(Command::ChangeEntityExtension(
+                                    idx_tab, tab, idx_entity, entity, extension,
+                                ))?;
+                            }
+                            Command::ChangeEntityPermissions(
+                                idx_tab,
+                                tab,
+                                idx_entity,
+                                entity,
+                                permissions,
+                            ) => {
+                                self.model.send(Command::ChangeEntityPermissions(
+                                    idx_tab,
+                                    tab,
+                                    idx_entity,
+                                    entity,
+                                    permissions,
+                                ))?;
+                            }
+                            Command::ChangeEntityOwners(
+                                idx_tab,
+                                tab,
+                                idx_entity,
+                                entity,
+                                owners,
+                            ) => {
+                                self.model.send(Command::ChangeEntityOwners(
+                                    idx_tab, tab, idx_entity, entity, owners,
+                                ))?;
+                            }
 
                             // Other
+                            Command::Uptade => {
+                                self.update_tabs()?;
+                                self.sync_view()?;
+                            }
                             Command::Error(err) => self.view.send(Command::Error(err))?,
                             Command::Drop => {
                                 self.send_drop()?;
@@ -154,10 +234,28 @@ impl JujikController {
                         }
                     };
 
+                    if self.update.elapsed() >= Duration::from_secs(5) {
+                        self.update_tabs()?;
+                        self.sync_view()?;
+
+                        self.update = Instant::now();
+                    }
+
                     std::thread::sleep(std::time::Duration::from_millis(10));
                 }
-                Ok(())
+
+                Ok(self.send_drop()?)
             })?)
+    }
+
+    fn update_tabs(&mut self) -> Result<(), JujikError> {
+        for tab in &mut self.tabs {
+            if let Err(_) = tab.update_entitys() {
+                //TODO Handle error
+            }
+        }
+
+        Ok(())
     }
 
     fn sync_view(&self) -> Result<(), JujikError> {
@@ -170,5 +268,9 @@ impl JujikController {
         let _view_drop = self.view.send(Command::Drop);
         let _model_drop = self.model.send(Command::Drop);
         Ok(())
+    }
+
+    fn read_save(&mut self) {
+        //TODO read a save
     }
 }

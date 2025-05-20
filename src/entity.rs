@@ -13,7 +13,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-#[derive(Debug, Default, PartialEq, Eq, Clone)]
+#[derive(Debug, Default, PartialEq, Eq, Clone, Hash)]
 pub struct Entity {
     global_path: PathBuf,
     name: String,
@@ -24,8 +24,8 @@ pub struct Entity {
 }
 
 impl Entity {
-    pub fn new(path_buf: PathBuf) -> Result<Entity, JujikError> {
-        let path = path_buf.as_path();
+    pub fn new(pathbuf: PathBuf) -> Result<Self, JujikError> {
+        let path = pathbuf.as_path();
 
         let global_path = Self::get_global_path(path)?;
         let name = Self::get_name(path)?;
@@ -43,11 +43,78 @@ impl Entity {
             owners,
         })
     }
+
+    pub fn ghost(pathbuf: PathBuf, name: String, kind: EntityKind) -> Result<Self, JujikError> {
+        let extension = pathbuf
+            .extension()
+            .and_then(|n| n.to_str())
+            .and_then(|n| Some(n.to_string()));
+
+        let permissions = EntityPermissions::new(match kind {
+            EntityKind::File => 0o644,
+            EntityKind::Directory => 0o755,
+            _ => 0o000,
+        });
+
+        Ok(Self {
+            global_path: pathbuf,
+            name,
+            extension,
+            kind,
+            permissions,
+            owners: EntityOwners::current()?,
+        })
+    }
+
+    pub fn is_file(&self) -> bool {
+        if let EntityKind::File = self.kind {
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn is_dir(&self) -> bool {
+        if let EntityKind::File = self.kind {
+            true
+        } else {
+            false
+        }
+    }
 }
 
 impl Entity {
     pub fn path(&self) -> PathBuf {
         self.global_path.clone()
+    }
+
+    pub fn path_str(&self) -> String {
+        if let Some(path_str) = self.global_path.to_str().and_then(|p| Some(p.to_string())) {
+            path_str
+        } else {
+            String::new()
+        }
+    }
+
+    pub fn path_dir(&self) -> PathBuf {
+        if let Some(path) = self.global_path.parent() {
+            path.to_path_buf()
+        } else {
+            PathBuf::new()
+        }
+    }
+
+    pub fn path_dir_str(&self) -> String {
+        if let Some(path) = self
+            .global_path
+            .parent()
+            .and_then(|p| p.to_str())
+            .and_then(|p| Some(p.to_string()))
+        {
+            path
+        } else {
+            String::new()
+        }
     }
 
     pub fn name(&self) -> String {
@@ -64,6 +131,14 @@ impl Entity {
 
     pub fn extension(&self) -> &Option<String> {
         &self.extension
+    }
+
+    pub fn extension_str(&self) -> String {
+        if let Some(extension) = &self.extension {
+            extension.clone()
+        } else {
+            "None".to_string()
+        }
     }
 
     pub fn kind(&self) -> &EntityKind {
@@ -86,19 +161,10 @@ impl Entity {
             Err(err) => Err(JujikError::from(err)),
         }
     }
-
     pub fn get_name(path: &Path) -> Result<String, JujikError> {
-        if let Some(name) = path.file_name().and_then(|name| name.to_str()) {
-            let mut name_split = name.split('.').collect::<Vec<&str>>();
-            if name_split.len() > 1 {
-                if name_split[0].is_empty() {
-                    return Ok(name.to_string());
-                }
-                name_split.pop();
-                Ok(name_split.join("."))
-            } else {
-                Ok(name.to_string())
-            }
+        //TODO PathBuf::file_stem maybe ???
+        if let Some(name) = path.file_stem().and_then(|n| n.to_str()) {
+            Ok(name.to_string())
         } else if let Some(path_str) = path.to_str() {
             Ok(match path_str {
                 "." => ".".to_string(),
@@ -108,28 +174,13 @@ impl Entity {
             })
         } else {
             //TODO Handle error
-            Err(JujikError::None)
+            Err(JujikError::Other(format!("")))
         }
     }
 
     fn get_extension(path: &Path) -> Result<Option<String>, JujikError> {
-        if path.is_dir() {
-            return Ok(None);
-        }
-
-        if let Some(extension) = path.extension() {
-            if let Some(extension) = extension.to_str() {
-                if let Some(char) = extension.chars().next() {
-                    if char.is_numeric() {
-                        return Ok(None);
-                    }
-                }
-
-                Ok(Some(extension.to_string()))
-            } else {
-                //TODO Handle error
-                Ok(None)
-            }
+        if let Some(extension) = path.extension().and_then(|n| n.to_str()) {
+            Ok(Some(extension.to_string()))
         } else {
             //TODO Handle error
             Ok(None)

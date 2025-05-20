@@ -1,3 +1,5 @@
+docs/
+test/
 debug/
 target/
 
@@ -8,3 +10,4 @@ Cargo.lock
 *.pdb
 
 **/*.log
+

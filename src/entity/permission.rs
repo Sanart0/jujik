@@ -1,4 +1,8 @@
-use std::fmt::{Debug, Display};
+use std::{
+    fmt::{Debug, Display},
+    fs::Permissions,
+    os::unix::fs::PermissionsExt,
+};
 
 #[derive(PartialEq, Eq, Clone, Copy)]
 pub enum EntityPermissionsKind {
@@ -14,7 +18,7 @@ pub enum EntityPermissionsCategory {
     Other,
 }
 
-#[derive(PartialEq, Eq, Default, Clone)]
+#[derive(PartialEq, Eq, Default, Clone, Hash)]
 pub struct EntityPermissions {
     mode: u32,
 }
@@ -101,6 +105,12 @@ impl EntityPermissionsKind {
             EntityPermissionsKind::Write => 0o2,
             EntityPermissionsKind::Execute => 0o1,
         }
+    }
+}
+
+impl Into<Permissions> for EntityPermissions {
+    fn into(self) -> Permissions {
+        Permissions::from_mode(self.mode)
     }
 }
 

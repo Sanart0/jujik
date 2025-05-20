@@ -5,6 +5,7 @@ use std::{fs::read_dir, path::PathBuf};
 pub enum TabKind {
     None,
     Entitys,
+    View,
     Editor,
 }
 
@@ -12,6 +13,7 @@ pub enum TabKind {
 pub enum TabContent {
     None,
     Entitys(Vec<Entity>),
+    View(PathBuf),
     Editor(PathBuf),
 }
 
@@ -29,6 +31,7 @@ impl Tab {
             pathbuf: pathbuf.clone(),
             content: match tab_kind {
                 TabKind::Entitys => TabContent::Entitys(Tab::read_dir(pathbuf)?),
+                TabKind::View => TabContent::View(pathbuf),
                 TabKind::Editor => TabContent::Editor(pathbuf),
                 TabKind::None => TabContent::None,
             },
@@ -60,16 +63,18 @@ impl Tab {
     }
 
     pub fn entitys(&self) -> Option<Vec<Entity>> {
-        match &self.content {
-            TabContent::Entitys(entitys) => Some(entitys.clone()),
-            _ => None,
+        if let TabContent::Entitys(entitys) = &self.content {
+            Some(entitys.clone())
+        } else {
+            None
         }
     }
 
     pub fn entitys_mut(&mut self) -> Option<&mut Vec<Entity>> {
-        match &mut self.content {
-            TabContent::Entitys(entitys) => Some(entitys),
-            _ => None,
+        if let TabContent::Entitys(entitys) = &mut self.content {
+            Some(entitys)
+        } else {
+            None
         }
     }
 
@@ -88,11 +93,8 @@ impl Tab {
     }
 
     pub fn change_dir(&mut self, pathbuf: PathBuf) -> Result<(), JujikError> {
-        match &self.content {
-            TabContent::Entitys(_) => {
-                *self = Tab::new(TabKind::Entitys, pathbuf)?;
-            }
-            _ => {}
+        if let TabContent::Entitys(_) = &self.content {
+            *self = Tab::new(TabKind::Entitys, pathbuf)?;
         }
 
         Ok(())
@@ -106,6 +108,16 @@ impl Tab {
                 }
             }
             _ => {}
+        }
+
+        Ok(())
+    }
+
+    pub fn update_entitys(&mut self) -> Result<(), JujikError> {
+        let pathbuf = self.pathbuf.clone();
+
+        if let Some(entitys) = self.entitys_mut() {
+            *entitys = Tab::read_dir(pathbuf)?;
         }
 
         Ok(())

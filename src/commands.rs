@@ -11,6 +11,7 @@ pub enum Command {
     Drop,
     Error(Box<dyn Debug + Send>),
     Sync(Vec<Pin>, Vec<Tab>),
+    Uptade,
 
     // Pin
     CreatePin(PathBuf),
@@ -30,7 +31,9 @@ pub enum Command {
 
     // Entity
     CreateEntity(usize, Tab, Entity),
-    ChangeEntityDirectory(usize, Tab, usize, Entity, PathBuf),
+    DeleteEntitys(usize, Tab, Vec<Entity>),
+    CopyEntitys(usize, Tab, usize, Vec<Entity>, PathBuf),
+    MoveEntitys(usize, Tab, usize, Vec<Entity>, PathBuf),
     ChangeEntityName(usize, Tab, usize, Entity, String),
     ChangeEntityExtension(usize, Tab, usize, Entity, String),
     ChangeEntityPermissions(usize, Tab, usize, Entity, EntityPermissions),
