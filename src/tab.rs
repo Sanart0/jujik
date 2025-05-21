@@ -2,12 +2,16 @@ use crate::{entity::Entity, error::JujikError};
 use serde::{Deserialize, Serialize};
 use std::{fmt::Display, fs::read_dir, path::PathBuf};
 
+#[derive(Default, Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
+pub struct FindParameters {}
+
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum TabKind {
     None,
     Entitys,
     View,
     Editor,
+    Find,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
@@ -16,6 +20,7 @@ pub enum TabContent {
     Entitys(Vec<Entity>),
     View(Entity),
     Editor(Entity),
+    Find(FindParameters),
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
@@ -34,6 +39,7 @@ impl Tab {
                 TabKind::Entitys => TabContent::Entitys(Tab::read_dir(pathbuf.clone())?),
                 TabKind::View => TabContent::View(Entity::new(pathbuf.clone())?),
                 TabKind::Editor => TabContent::Editor(Entity::new(pathbuf.clone())?),
+                TabKind::Find => TabContent::Find(FindParameters::default()),
                 TabKind::None => TabContent::None,
             },
         })
@@ -150,6 +156,7 @@ impl Display for TabKind {
                 TabKind::Entitys => "Entitys",
                 TabKind::View => "View",
                 TabKind::Editor => "Editor",
+                TabKind::Find => "Find",
                 TabKind::None => "None",
             }
         )

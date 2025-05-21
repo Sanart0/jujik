@@ -19,7 +19,7 @@ pub enum EntityPermissionsCategory {
     Other,
 }
 
-#[derive(PartialEq, Eq, Default, Clone, Hash, Serialize, Deserialize)]
+#[derive(Default, PartialEq, Eq, Clone, Hash, Serialize, Deserialize)]
 pub struct EntityPermissions {
     mode: u32,
 }
@@ -117,12 +117,12 @@ impl Into<Permissions> for EntityPermissions {
 
 impl Display for EntityPermissions {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{} ({:o})", self.symbolic(), self.mode)
     }
 }
 
 impl Debug for EntityPermissions {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} ({:o})", self.symbolic(), self.mode)
+        write!(f, "{}", self)
     }
 }

@@ -306,9 +306,7 @@ impl JujikController {
         self.update_tabs()?;
         self.sync_view()?;
 
-        Ok(self
-            .view
-            .send(Command::SetConfig(self.config.clone()))?)
+        Ok(self.view.send(Command::SetConfig(self.config.clone()))?)
     }
 
     fn update_tabs(&mut self) -> Result<(), JujikError> {

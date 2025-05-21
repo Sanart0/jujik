@@ -1,12 +1,16 @@
+pub mod date;
 pub mod kind;
 pub mod owner;
 pub mod permission;
+pub mod size;
 
 use crate::error::JujikError;
+use date::EntityDate;
 use kind::EntityKind;
 use owner::EntityOwners;
 use permission::EntityPermissions;
 use serde::{Deserialize, Serialize};
+use size::{EntitySize, EntitySizeKind};
 use std::{
     fmt::Display,
     fs::{File, canonicalize, symlink_metadata},
@@ -23,26 +27,23 @@ pub struct Entity {
     kind: EntityKind,
     permissions: EntityPermissions,
     owners: EntityOwners,
+    size: EntitySize,
+    date: EntityDate,
 }
 
 impl Entity {
     pub fn new(pathbuf: PathBuf) -> Result<Self, JujikError> {
         let path = pathbuf.as_path();
 
-        let global_path = Self::get_global_path(path)?;
-        let name = Self::get_name(path)?;
-        let extension = Self::get_extension(path)?;
-        let kind = Self::get_kind(path)?;
-        let permissions = Self::get_permissions(path)?;
-        let owners = Self::get_owners(path)?;
-
         Ok(Self {
-            global_path,
-            name,
-            extension,
-            kind,
-            permissions,
-            owners,
+            global_path: Self::get_global_path(path)?,
+            name: Self::get_name(path)?,
+            extension: Self::get_extension(path)?,
+            kind: Self::get_kind(path)?,
+            permissions: Self::get_permissions(path)?,
+            owners: Self::get_owners(path)?,
+            size: Self::get_size(path)?,
+            date: Self::get_date(path)?,
         })
     }
 
@@ -65,6 +66,8 @@ impl Entity {
             kind,
             permissions,
             owners: EntityOwners::current()?,
+            size: EntitySize::default(),
+            date: EntityDate::now(),
         })
     }
 }
@@ -137,6 +140,14 @@ impl Entity {
 
     pub fn owners(&self) -> &EntityOwners {
         &self.owners
+    }
+
+    pub fn size(&self) -> &EntitySize {
+        &self.size
+    }
+
+    pub fn date(&self) -> &EntityDate {
+        &self.date
     }
 
     pub fn exists(&self) -> bool {
@@ -237,22 +248,31 @@ impl Entity {
 
         EntityOwners::new(uid, gid)
     }
+
+    fn get_size(path: &Path) -> Result<EntitySize, JujikError> {
+        let metadata = symlink_metadata(path)?;
+
+        Ok(EntitySize::new(metadata.len()))
+    }
+
+    fn get_date(path: &Path) -> Result<EntityDate, JujikError> {
+        let metadata = symlink_metadata(path)?;
+
+        Ok(EntityDate::new(metadata.modified()?, metadata.created()?))
+    }
 }
 
 impl Display for Entity {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let extension = if let Some(extension) = &self.extension {
-            extension
-        } else {
-            ""
-        };
         f.debug_struct("Entity")
             .field("global_path", &self.global_path)
             .field("name", &self.name)
-            .field("extension", &extension)
+            .field("extension", &self.extension_str())
             .field("kind", &self.kind)
             .field("permissions", &self.permissions)
             .field("owners", &self.owners)
+            .field("size", &self.size)
+            .field("date", &self.date)
             .finish()
     }
 }

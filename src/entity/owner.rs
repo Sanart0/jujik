@@ -4,7 +4,7 @@ use crate::error::JujikError;
 use nix::unistd::{Gid, Group, Uid, User, getgid, getuid};
 use serde::{Deserialize, Serialize};
 
-#[derive(PartialEq, Eq, Default, Clone, Hash, Serialize, Deserialize)]
+#[derive(Default, PartialEq, Eq, Clone, Hash, Serialize, Deserialize)]
 pub struct EntityOwners {
     uid: u32,
     gid: u32,
@@ -96,16 +96,16 @@ impl EntityOwners {
 
 impl Display for EntityOwners {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
-    }
-}
-
-impl Debug for EntityOwners {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
             "{}({}):{}({})",
             self.username, self.uid, self.groupname, self.gid
         )
+    }
+}
+
+impl Debug for EntityOwners {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self)
     }
 }

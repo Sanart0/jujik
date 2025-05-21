@@ -834,7 +834,7 @@ impl JujikView {
                                     row.col(|ui| {
                                         ui.centered_and_justified(|ui| {
                                             ui.label(
-                                                RichText::new(format!("{}", 0))
+                                                RichText::new(format!("{}", entity.size()))
                                                     .color(self.style.text_color)
                                                     .size(self.style.text_size),
                                             );
@@ -845,9 +845,12 @@ impl JujikView {
                                     row.col(|ui| {
                                         ui.centered_and_justified(|ui| {
                                             ui.label(
-                                                RichText::new(format!("{}", 0))
-                                                    .color(self.style.text_color)
-                                                    .size(self.style.text_size),
+                                                RichText::new(format!(
+                                                    "{}",
+                                                    entity.date().modification_str()
+                                                ))
+                                                .color(self.style.text_color)
+                                                .size(self.style.text_size),
                                             );
                                         });
                                     });
@@ -856,9 +859,12 @@ impl JujikView {
                                     row.col(|ui| {
                                         ui.centered_and_justified(|ui| {
                                             ui.label(
-                                                RichText::new(format!("{}", 0))
-                                                    .color(self.style.text_color)
-                                                    .size(self.style.text_size),
+                                                RichText::new(format!(
+                                                    "{}",
+                                                    entity.date().creation_str()
+                                                ))
+                                                .color(self.style.text_color)
+                                                .size(self.style.text_size),
                                             );
                                         });
                                     });
@@ -1776,7 +1782,7 @@ impl JujikView {
 
     fn entity_change_permissions(&mut self, ctx: &Context) {
         let modal = Modal::new(Id::new(format!(
-            "Entity Change Permissions: {:?}",
+            "Entity Change Permissions: {}",
             self.entity_info.permissions
         )))
         .show(ctx, |ui| {
@@ -2011,7 +2017,7 @@ impl JujikView {
     fn entity_change_owners(&mut self, ctx: &Context) {
         let modal =
             Modal::new(Id::new(format!(
-                "Entity Change owners: {:?}",
+                "Entity Change owners: {}",
                 self.entity_info.owners
             )))
             .show(ctx, |ui| {
