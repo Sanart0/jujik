@@ -1,15 +1,7 @@
-use crate::{
-    commands::Command,
-    config::{self, Config},
-    error::JujikError,
-    pin::Pin,
-    tab::Tab,
-};
+use crate::{commands::Command, config::Config, error::JujikError};
 use std::{
-    fs,
     sync::mpsc::{Receiver, Sender},
     thread::{self, JoinHandle},
-    time::{Duration, Instant},
 };
 
 pub struct JujikController {
@@ -17,19 +9,13 @@ pub struct JujikController {
     view: Sender<Command>,
     controller: Receiver<Command>,
     config: Config,
-    update: Instant,
-    pins: Vec<Pin>,
-    tabs: Vec<Tab>,
 }
-
 impl JujikController {
     pub fn new(
         model: Sender<Command>,
         view: Sender<Command>,
         controller: Receiver<Command>,
     ) -> Self {
-        //TODO load a pins from cache toml file, and sync saves with view
-
         let config = match Config::load() {
             Ok(config) => config,
             Err(_) => {
@@ -42,10 +28,7 @@ impl JujikController {
             model,
             view,
             controller,
-            config: config.clone(),
-            update: Instant::now(),
-            pins: config.pins(),
-            tabs: config.tabs(),
+            config: config,
         }
     }
 
@@ -53,10 +36,12 @@ impl JujikController {
         Ok(thread::Builder::new()
             .name("Controller".to_string())
             .spawn(move || -> Result<(), JujikError> {
-                self.send_config()?;
+                // self.update_tabs()?;
+                self.view.send(Command::SetConfig(self.config.clone()))?;
 
                 'event_loop: loop {
                     if let Ok(command) = self.controller.try_recv() {
+                        #[cfg(feature = "print_command")]
                         println!("Controller: {:?}", command);
 
                         match command {
@@ -76,9 +61,9 @@ impl JujikController {
                                 }
                             }
                             Command::DeletePin(idx_d, pin_d) => {
-                                for (idx, pin) in self.pins.clone().iter().enumerate() {
+                                for (idx, pin) in self.config.pins.clone().iter().enumerate() {
                                     if idx == idx_d && pin.eq(&pin_d) {
-                                        self.pins.remove(idx_d);
+                                        self.config.pins.remove(idx_d);
                                     }
                                 }
 
@@ -92,40 +77,76 @@ impl JujikController {
                                     .send(Command::ChangePinDirectory(idx, pin, pathbuf))?;
                             }
                             Command::ChangePinPosition(from, to, pin) => {
-                                if from < self.pins.len() && to < self.pins.len() {
-                                    let pin_temp = self.pins[to].clone();
-                                    self.pins[to] = pin.clone();
-                                    self.pins[from] = pin_temp;
+                                if from < self.config.pins.len() && to < self.config.pins.len() {
+                                    let pin_temp = self.config.pins[to].clone();
+                                    self.config.pins[to] = pin.clone();
+                                    self.config.pins[from] = pin_temp;
                                 }
 
                                 self.sync_view()?;
                             }
                             Command::NewPin(idx, pin) => {
                                 if let Some(idx) = idx {
-                                    if let Some(pin_mut) = self.pins.get_mut(idx) {
+                                    if let Some(pin_mut) = self.config.pins.get_mut(idx) {
                                         *pin_mut = pin;
                                     }
                                 } else {
-                                    self.pins.push(pin);
+                                    self.config.pins.push(pin);
                                 }
 
                                 self.sync_view()?;
                             }
 
                             // Tab
-                            Command::CreateTab(tab_kind, pathbuf) => {
+                            Command::CreateEntitys(pathbuf) => {
                                 if pathbuf.exists() {
-                                    self.model.send(Command::CreateTab(tab_kind, pathbuf))?
+                                    self.model.send(Command::CreateEntitys(pathbuf))?
                                 } else {
                                     self.view.send(Command::Error(Box::new(JujikError::Other(
                                         format!("Path {:?} does not exist", pathbuf),
                                     ))))?;
                                 }
                             }
+                            Command::CreateView(pathbuf) => {
+                                if pathbuf.exists() {
+                                    self.model.send(Command::CreateView(pathbuf))?
+                                } else {
+                                    self.view.send(Command::Error(Box::new(JujikError::Other(
+                                        format!("Path {:?} does not exist", pathbuf),
+                                    ))))?;
+                                }
+                            }
+                            Command::CreateEditor(pathbuf) => {
+                                if pathbuf.exists() {
+                                    self.model.send(Command::CreateEditor(pathbuf))?
+                                } else {
+                                    self.view.send(Command::Error(Box::new(JujikError::Other(
+                                        format!("Path {:?} does not exist", pathbuf),
+                                    ))))?;
+                                }
+                            }
+                            Command::CreateFinder(parameters) => {
+                                if parameters.path.exists() {
+                                    self.model.send(Command::CreateFinder(parameters))?
+                                } else {
+                                    self.view.send(Command::Error(Box::new(JujikError::Other(
+                                        format!("Path {:?} does not exist", parameters.path),
+                                    ))))?;
+                                }
+                            }
                             Command::DeleteTab(idx_d, tab_d) => {
-                                for (idx, tab) in self.tabs.clone().iter().enumerate() {
+                                for (idx, tab) in self.config.tabs.clone().iter().enumerate() {
                                     if idx == idx_d && tab.eq(&tab_d) {
-                                        self.tabs.remove(idx_d);
+                                        self.config.tabs.remove(idx_d);
+                                    }
+                                }
+
+                                self.sync_view()?;
+                            }
+                            Command::UpdateTab(idx) => {
+                                if let Some(tab) = self.config.tabs.get_mut(idx) {
+                                    if let Err(_) = tab.update_entitys() {
+                                        //TODO Handle error
                                     }
                                 }
 
@@ -139,19 +160,19 @@ impl JujikController {
                                     .send(Command::ChangeTabDirectory(idx, tab, pathbuf))?;
                             }
                             Command::ChangeTabPosition(from, to, tab) => {
-                                let tab_temp = self.tabs[to].clone();
-                                self.tabs[to] = tab.clone();
-                                self.tabs[from] = tab_temp;
+                                let tab_temp = self.config.tabs[to].clone();
+                                self.config.tabs[to] = tab.clone();
+                                self.config.tabs[from] = tab_temp;
 
                                 self.sync_view()?;
                             }
                             Command::NewTab(idx, tab) => {
                                 if let Some(idx) = idx {
-                                    if let Some(tab_mut) = self.tabs.get_mut(idx) {
+                                    if let Some(tab_mut) = self.config.tabs.get_mut(idx) {
                                         *tab_mut = tab;
                                     }
                                 } else {
-                                    self.tabs.push(tab);
+                                    self.config.tabs.push(tab);
                                 }
 
                                 self.sync_view()?;
@@ -248,17 +269,25 @@ impl JujikController {
                                     ))?;
                                 }
                             }
+                            Command::ChangeEntitysSortBy(idx, tab, sordby) => {
+                                self.model
+                                    .send(Command::ChangeEntitysSortBy(idx, tab, sordby))?;
+                            }
+
+                            // Find
+                            Command::UpdateFind(idx_tab, tab, parameters) => {}
 
                             // Config
                             Command::SetConfig(config) => {
-                                self.config = config;
+                                self.config = config.clone();
                                 self.write_config();
+                                self.view.send(Command::SetConfig(config))?;
                             }
 
                             // Other
-                            Command::Uptade => {
+                            Command::Update => {
                                 self.update_tabs()?;
-                                self.sync_view()?;
+                                self.view.send(Command::SetConfig(self.config.clone()))?;
                             }
                             Command::Error(err) => self.view.send(Command::Error(err))?,
                             Command::Drop => {
@@ -270,14 +299,6 @@ impl JujikController {
                         }
                     };
 
-                    if self.update.elapsed() >= Duration::from_secs(5) {
-                        self.update_tabs()?;
-                        self.sync_view()?;
-                        self.view.send(Command::GetConfig)?;
-
-                        self.update = Instant::now();
-                    }
-
                     std::thread::sleep(std::time::Duration::from_millis(10));
                 }
 
@@ -286,32 +307,16 @@ impl JujikController {
     }
 
     fn write_config(&mut self) {
-        self.config.set_tabs(
-            self.tabs
-                .clone()
-                .into_iter()
-                .map(|mut t| {
-                    t.clear_entitys();
-                    t
-                })
-                .collect(),
-        );
+        self.config.tabs.iter_mut().for_each(|t| t.clear_entitys());
 
         if let Err(_) = self.config.write() {
             //TODO Handle error
         }
     }
 
-    fn send_config(&mut self) -> Result<(), JujikError> {
-        self.update_tabs()?;
-        self.sync_view()?;
-
-        Ok(self.view.send(Command::SetConfig(self.config.clone()))?)
-    }
-
     fn update_tabs(&mut self) -> Result<(), JujikError> {
-        for tab in &mut self.tabs {
-            if let Err(_) = tab.update_entitys() {
+        for tab in &mut self.config.tabs {
+            if let Err(err) = tab.update_entitys() {
                 //TODO Handle error
             }
         }
@@ -319,10 +324,15 @@ impl JujikController {
         Ok(())
     }
 
+    fn root_access(&self) -> Result<(), JujikError> {
+        Ok(())
+    }
+
     fn sync_view(&self) -> Result<(), JujikError> {
-        Ok(self
-            .view
-            .send(Command::Sync(self.pins.clone(), self.tabs.clone()))?)
+        Ok(self.view.send(Command::Sync(
+            self.config.pins.clone(),
+            self.config.tabs.clone(),
+        ))?)
     }
 
     fn send_drop(&self) -> Result<(), JujikError> {

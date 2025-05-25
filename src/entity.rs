@@ -1,4 +1,5 @@
 pub mod date;
+pub mod find;
 pub mod kind;
 pub mod owner;
 pub mod permission;
@@ -10,12 +11,16 @@ use kind::EntityKind;
 use owner::EntityOwners;
 use permission::EntityPermissions;
 use serde::{Deserialize, Serialize};
-use size::{EntitySize, EntitySizeKind};
+use size::EntitySize;
+#[cfg(feature = "dir_size")]
+use std::collections::LinkedList;
+#[cfg(feature = "dir_size")]
+use std::fs;
 use std::{
     fmt::Display,
     fs::{File, canonicalize, symlink_metadata},
     io::Read,
-    os::unix::fs::{FileTypeExt, MetadataExt},
+    os::{linux::fs::MetadataExt, unix::fs::FileTypeExt},
     path::{Path, PathBuf},
 };
 
@@ -28,7 +33,8 @@ pub struct Entity {
     permissions: EntityPermissions,
     owners: EntityOwners,
     size: EntitySize,
-    date: EntityDate,
+    modification: EntityDate,
+    creation: EntityDate,
 }
 
 impl Entity {
@@ -43,7 +49,8 @@ impl Entity {
             permissions: Self::get_permissions(path)?,
             owners: Self::get_owners(path)?,
             size: Self::get_size(path)?,
-            date: Self::get_date(path)?,
+            modification: Self::get_modification(path)?,
+            creation: Self::get_creation(path)?,
         })
     }
 
@@ -67,7 +74,8 @@ impl Entity {
             permissions,
             owners: EntityOwners::current()?,
             size: EntitySize::default(),
-            date: EntityDate::now(),
+            modification: EntityDate::default(),
+            creation: EntityDate::default(),
         })
     }
 }
@@ -146,8 +154,12 @@ impl Entity {
         &self.size
     }
 
-    pub fn date(&self) -> &EntityDate {
-        &self.date
+    pub fn modification(&self) -> &EntityDate {
+        &self.modification
+    }
+
+    pub fn creation(&self) -> &EntityDate {
+        &self.creation
     }
 
     pub fn exists(&self) -> bool {
@@ -237,28 +249,89 @@ impl Entity {
     }
 
     fn get_permissions(path: &Path) -> Result<EntityPermissions, JujikError> {
-        let mode = symlink_metadata(path)?.mode();
+        let mode = symlink_metadata(path)?.st_mode();
 
         Ok(EntityPermissions::new(mode))
     }
 
     fn get_owners(path: &Path) -> Result<EntityOwners, JujikError> {
         let metadata = symlink_metadata(path)?;
-        let (uid, gid) = (metadata.uid(), metadata.gid());
+        let (uid, gid) = (metadata.st_uid(), metadata.st_gid());
 
         EntityOwners::new(uid, gid)
     }
 
     fn get_size(path: &Path) -> Result<EntitySize, JujikError> {
-        let metadata = symlink_metadata(path)?;
+        #[cfg(feature = "dir_size")]
+        if path.is_dir() {
+            let mut entity_size = EntitySize::new(0);
+            let mut pathbuf_stack: LinkedList<PathBuf> = LinkedList::new();
 
-        Ok(EntitySize::new(metadata.len()))
+            if let Ok(read_dir) = fs::read_dir(path) {
+                pathbuf_stack = read_dir
+                    .map(|f| {
+                        if let Ok(dir_entry) = f {
+                            dir_entry.path()
+                        } else {
+                            PathBuf::new()
+                        }
+                    })
+                    .collect()
+            }
+
+            while !pathbuf_stack.is_empty() {
+                let pathbuf = pathbuf_stack.front().unwrap();
+
+                if let Ok(metadata) = symlink_metadata(pathbuf.as_path()) {
+                    if pathbuf.is_dir() && !metadata.is_symlink() {
+                        if let Ok(read_dir) = fs::read_dir(pathbuf.as_path()) {
+                            for dir_entry in read_dir {
+                                if let Ok(dir_entry) = dir_entry {
+                                    pathbuf_stack.push_back(dir_entry.path());
+                                }
+                            }
+                        }
+                    } else {
+                        if let Ok(metadata) = symlink_metadata(pathbuf) {
+                            entity_size.add(metadata.len());
+                        }
+                    }
+                }
+
+                pathbuf_stack.pop_front();
+            }
+
+            Ok(entity_size)
+        } else {
+            Ok(EntitySize::new(symlink_metadata(path)?.len()))
+        }
+
+        #[cfg(not(feature = "dir_size"))]
+        if path.is_dir() {
+            Ok(EntitySize::default())
+        } else {
+            Ok(EntitySize::new(symlink_metadata(path)?.len()))
+        }
     }
 
-    fn get_date(path: &Path) -> Result<EntityDate, JujikError> {
+    fn get_modification(path: &Path) -> Result<EntityDate, JujikError> {
         let metadata = symlink_metadata(path)?;
 
-        Ok(EntityDate::new(metadata.modified()?, metadata.created()?))
+        if let Ok(date_modification) = metadata.modified() {
+            Ok(EntityDate::new(date_modification))
+        } else {
+            Ok(EntityDate::default())
+        }
+    }
+
+    fn get_creation(path: &Path) -> Result<EntityDate, JujikError> {
+        let metadata = symlink_metadata(path)?;
+
+        if let Ok(date_creation) = metadata.modified() {
+            Ok(EntityDate::new(date_creation))
+        } else {
+            Ok(EntityDate::default())
+        }
     }
 }
 
@@ -272,7 +345,8 @@ impl Display for Entity {
             .field("permissions", &self.permissions)
             .field("owners", &self.owners)
             .field("size", &self.size)
-            .field("date", &self.date)
+            .field("modification", &self.modification)
+            .field("creation", &self.creation)
             .finish()
     }
 }

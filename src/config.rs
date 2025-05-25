@@ -2,7 +2,7 @@ use crate::{
     error::JujikError,
     pin::Pin,
     tab::{self, Tab},
-    view::EntitysShowColumn,
+    view::{EntitysShowColumn, JujikStyle},
 };
 use serde::{Deserialize, Serialize};
 use std::{fs, path::PathBuf};
@@ -11,20 +11,23 @@ const CONFIG_PATH: &'static str = "./config.json";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
-    pins: Vec<Pin>,
-    tabs: Vec<Tab>,
-    current_tab_idx: usize,
-    entitys_show: EntitysShowColumn,
+    pub style: JujikStyle,
+    pub pins: Vec<Pin>,
+    pub tabs: Vec<Tab>,
+    pub current_tab_idx: usize,
+    pub entitys_show: EntitysShowColumn,
 }
 
 impl Config {
     pub fn new(
+        style: JujikStyle,
         pins: Vec<Pin>,
         tabs: Vec<Tab>,
         current_tab_idx: usize,
         entitys_show: EntitysShowColumn,
     ) -> Self {
         Self {
+            style,
             pins,
             tabs,
             current_tab_idx,
@@ -39,31 +42,12 @@ impl Config {
     pub fn load() -> Result<Self, JujikError> {
         Ok(serde_json::from_str(&fs::read_to_string(CONFIG_PATH)?)?)
     }
-
-    pub fn pins(&self) -> Vec<Pin> {
-        self.pins.clone()
-    }
-
-    pub fn tabs(&self) -> Vec<Tab> {
-        self.tabs.clone()
-    }
-
-    pub fn current_tab_idx(&self) -> usize {
-        self.current_tab_idx
-    }
-
-    pub fn entitys_show(&self) -> EntitysShowColumn {
-        self.entitys_show.clone()
-    }
-
-    pub fn set_tabs(&mut self, tabs: Vec<Tab>) {
-        self.tabs.clone_from(&tabs);
-    }
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
+            style: JujikStyle::default(),
             pins: vec![
                 Pin::new("Home".to_string(), PathBuf::from("/home/sanart0/")),
                 Pin::new(

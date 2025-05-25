@@ -1,8 +1,8 @@
 use crate::{
     config::Config,
-    entity::{Entity, owner::EntityOwners, permission::EntityPermissions},
+    entity::{Entity, find::FindParameters, owner::EntityOwners, permission::EntityPermissions},
     pin::Pin,
-    tab::{Tab, TabKind},
+    tab::{SortBy, Tab},
 };
 use std::{fmt::Debug, path::PathBuf};
 
@@ -12,7 +12,7 @@ pub enum Command {
     Drop,
     Error(Box<dyn Debug + Send>),
     Sync(Vec<Pin>, Vec<Tab>),
-    Uptade,
+    Update,
 
     // Config
     GetConfig,
@@ -27,12 +27,17 @@ pub enum Command {
     NewPin(Option<usize>, Pin),
 
     // Tab
-    CreateTab(TabKind, PathBuf),
+    CreateEntitys(PathBuf),
+    CreateView(PathBuf),
+    CreateEditor(PathBuf),
+    CreateFinder(FindParameters),
+    UpdateTab(usize),
     DeleteTab(usize, Tab),
     ChangeTabName(usize, Tab, String),
     ChangeTabDirectory(usize, Tab, Option<PathBuf>),
     ChangeTabPosition(usize, usize, Tab),
     NewTab(Option<usize>, Tab),
+    ChangeEntitysSortBy(usize, Tab, SortBy),
 
     // Entity
     CreateEntity(usize, Tab, Entity),
@@ -44,4 +49,7 @@ pub enum Command {
     ChangeEntityPermissions(usize, Tab, usize, Entity, EntityPermissions),
     ChangeEntityOwners(usize, Tab, usize, Entity, EntityOwners),
     ChangeEntityContent(usize, Tab, Entity, String),
+
+    // Find
+    UpdateFind(usize, Tab, FindParameters),
 }

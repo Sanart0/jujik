@@ -1,7 +1,6 @@
 use crate::{commands::Command, error::JujikError, pin::Pin, tab::Tab};
 use std::{
-    fs::{self, File},
-    io::Write,
+    fs,
     os::unix,
     sync::mpsc::{Receiver, Sender},
     thread::{self, JoinHandle},
@@ -22,6 +21,7 @@ impl JujikModel {
             move || -> Result<(), JujikError> {
                 'event_loop: loop {
                     if let Ok(command) = self.model.try_recv() {
+                        #[cfg(feature = "print_command")]
                         println!("Model: {:?}", command);
 
                         match command {
@@ -50,10 +50,32 @@ impl JujikModel {
                             }
 
                             // Tab
-                            Command::CreateTab(tab_kind, pathbuf) => {
-                                let new_tab = Tab::new(tab_kind, pathbuf);
-
-                                match new_tab {
+                            Command::CreateEntitys(pathbuf) => match Tab::tab_entitys(pathbuf) {
+                                Ok(new_tab) => {
+                                    self.controller.send(Command::NewTab(None, new_tab))?;
+                                }
+                                Err(err) => {
+                                    self.controller.send(Command::Error(Box::new(err)))?;
+                                }
+                            },
+                            Command::CreateView(pathbuf) => match Tab::tab_view(pathbuf) {
+                                Ok(new_tab) => {
+                                    self.controller.send(Command::NewTab(None, new_tab))?;
+                                }
+                                Err(err) => {
+                                    self.controller.send(Command::Error(Box::new(err)))?;
+                                }
+                            },
+                            Command::CreateEditor(pathbuf) => match Tab::tab_editor(pathbuf) {
+                                Ok(new_tab) => {
+                                    self.controller.send(Command::NewTab(None, new_tab))?;
+                                }
+                                Err(err) => {
+                                    self.controller.send(Command::Error(Box::new(err)))?;
+                                }
+                            },
+                            Command::CreateFinder(parameters) => {
+                                match Tab::tab_finder(parameters) {
                                     Ok(new_tab) => {
                                         self.controller.send(Command::NewTab(None, new_tab))?;
                                     }
@@ -99,7 +121,7 @@ impl JujikModel {
                                     }
                                 }
 
-                                self.controller.send(Command::Uptade)?;
+                                self.controller.send(Command::Update)?;
                             }
                             Command::CopyEntitys(idx_tab, tab, idx_entity, entitys, pathbuf) => {
                                 for entity in entitys {
@@ -113,7 +135,7 @@ impl JujikModel {
                                     }
                                 }
 
-                                self.controller.send(Command::Uptade)?;
+                                self.controller.send(Command::Update)?;
                             }
                             Command::MoveEntitys(idx_tab, tab, idx_entity, entitys, pathbuf) => {
                                 for entity in entitys {
@@ -127,18 +149,18 @@ impl JujikModel {
                                     }
                                 }
 
-                                self.controller.send(Command::Uptade)?;
+                                self.controller.send(Command::Update)?;
                             }
                             Command::ChangeEntityName(idx_tab, tab, idx_entity, entity, name) => {
                                 let mut path = entity.path_dir();
-                                path.push(name);
+                                path.push(name + "." + entity.extension_str().as_str());
 
                                 let res = fs::rename(entity.path(), path);
 
                                 if let Err(_) = res {
                                     //TODO Handle error
                                 } else {
-                                    self.controller.send(Command::Uptade)?;
+                                    self.controller.send(Command::Update)?;
                                 }
                             }
                             Command::ChangeEntityExtension(
@@ -149,14 +171,14 @@ impl JujikModel {
                                 extension,
                             ) => {
                                 let mut path = entity.path_dir();
-                                path.push(entity.name_with_extension() + extension.as_str());
+                                path.push(entity.name() + "." + extension.as_str());
 
                                 let res = fs::rename(entity.path(), path);
 
                                 if let Err(_) = res {
                                     //TODO Handle error
                                 } else {
-                                    self.controller.send(Command::Uptade)?;
+                                    self.controller.send(Command::Update)?;
                                 }
                             }
                             Command::ChangeEntityPermissions(
@@ -171,7 +193,7 @@ impl JujikModel {
                                 if let Err(_) = res {
                                     //TODO Handle error
                                 } else {
-                                    self.controller.send(Command::Uptade)?;
+                                    self.controller.send(Command::Update)?;
                                 }
                             }
                             Command::ChangeEntityOwners(
@@ -190,7 +212,7 @@ impl JujikModel {
                                 if let Err(_) = res {
                                     //TODO Handle error
                                 } else {
-                                    self.controller.send(Command::Uptade)?;
+                                    self.controller.send(Command::Update)?;
                                 }
                             }
                             Command::ChangeEntityContent(idx, tab, entity, content) => {
@@ -199,8 +221,13 @@ impl JujikModel {
                                 if let Err(_) = res {
                                     //TODO Handle error
                                 } else {
-                                    self.controller.send(Command::Uptade)?;
+                                    self.controller.send(Command::Update)?;
                                 }
+                            }
+                            Command::ChangeEntitysSortBy(idx, mut tab, sortby) => {
+                                tab.set_sortby(&sortby);
+
+                                self.controller.send(Command::NewTab(Some(idx), tab))?;
                             }
 
                             // Other

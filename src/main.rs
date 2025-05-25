@@ -5,9 +5,7 @@ use jujik::{
 use log::LevelFilter;
 use simplelog::{ColorChoice, CombinedLogger, Config, TermLogger, TerminalMode, WriteLogger};
 use std::{
-    env::current_dir,
     fs::{self, File},
-    io::Write,
     process,
     sync::mpsc,
 };
@@ -15,7 +13,7 @@ use std::{
 fn main() -> Result<(), JujikError> {
     CombinedLogger::init(vec![
         TermLogger::new(
-            LevelFilter::Info,
+            LevelFilter::Debug,
             Config::default(),
             TerminalMode::Mixed,
             ColorChoice::Auto,

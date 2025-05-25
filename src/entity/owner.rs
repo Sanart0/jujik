@@ -4,7 +4,7 @@ use crate::error::JujikError;
 use nix::unistd::{Gid, Group, Uid, User, getgid, getuid};
 use serde::{Deserialize, Serialize};
 
-#[derive(Default, PartialEq, Eq, Clone, Hash, Serialize, Deserialize)]
+#[derive(Default, PartialEq, Eq, PartialOrd, Ord, Clone, Hash, Serialize, Deserialize)]
 pub struct EntityOwners {
     uid: u32,
     gid: u32,
