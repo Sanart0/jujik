@@ -57,6 +57,10 @@ impl EntitySize {
         self.kind = kind;
         self.size = size;
     }
+
+    pub fn size_byte(&self) -> u64 {
+        self.size_byte
+    }
 }
 
 impl Eq for EntitySize {}

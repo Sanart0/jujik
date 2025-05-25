@@ -1,6 +1,6 @@
 use std::{
     collections::VecDeque,
-    fs::{self, read_dir, symlink_metadata},
+    fs::{read_dir, symlink_metadata},
     path::PathBuf,
 };
 

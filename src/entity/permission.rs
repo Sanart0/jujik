@@ -79,6 +79,10 @@ impl EntityPermissions {
 
         format!("{}{}{}{}{}{}{}{}{}", ur, uw, ue, gr, gw, ge, or, ow, oe)
     }
+
+    pub fn mode(&self) -> u32 {
+        self.mode
+    }
 }
 
 impl EntityPermissionsCategory {

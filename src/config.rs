@@ -1,7 +1,7 @@
 use crate::{
     error::JujikError,
     pin::Pin,
-    tab::{self, Tab},
+    tab::Tab,
     view::{EntitysShowColumn, JujikStyle},
 };
 use serde::{Deserialize, Serialize};
