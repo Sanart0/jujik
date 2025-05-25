@@ -1,6 +1,6 @@
 use crate::{commands::Command, error::JujikError, pin::Pin, tab::Tab};
 use std::{
-    fs,
+    fs::{self, File},
     os::unix,
     sync::mpsc::{Receiver, Sender},
     thread::{self, JoinHandle},
@@ -107,7 +107,51 @@ impl JujikModel {
                             }
 
                             // Entity
-                            Command::CreateEntity(idx, tab, entity_ghost) => {}
+                            Command::CreateEntity(idx, tab, entity_ghost) => {
+                                if entity_ghost.is_dir() {
+                                    match fs::create_dir_all(entity_ghost.path()) {
+                                        Ok(_) => {
+                                            match fs::set_permissions(
+                                                entity_ghost.path(),
+                                                entity_ghost.permissions().clone().into(),
+                                            ) {
+                                                Ok(_) => {
+                                                    self.controller
+                                                        .send(Command::UpdateTab(idx))?;
+                                                }
+                                                Err(err) => {
+                                                    self.controller
+                                                        .send(Command::Error(Box::new(err)))?;
+                                                }
+                                            };
+                                        }
+                                        Err(err) => {
+                                            self.controller.send(Command::Error(Box::new(err)))?;
+                                        }
+                                    };
+                                } else {
+                                    match File::create(entity_ghost.path_with_name()) {
+                                        Ok(_) => {
+                                            match fs::set_permissions(
+                                                entity_ghost.path(),
+                                                entity_ghost.permissions().clone().into(),
+                                            ) {
+                                                Ok(_) => {
+                                                    self.controller
+                                                        .send(Command::UpdateTab(idx))?;
+                                                }
+                                                Err(err) => {
+                                                    self.controller
+                                                        .send(Command::Error(Box::new(err)))?;
+                                                }
+                                            };
+                                        }
+                                        Err(err) => {
+                                            self.controller.send(Command::Error(Box::new(err)))?;
+                                        }
+                                    };
+                                }
+                            }
                             Command::DeleteEntitys(idx, tab, entitys) => {
                                 for entity in entitys {
                                     let res = if entity.is_dir() {

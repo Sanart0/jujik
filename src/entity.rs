@@ -93,6 +93,10 @@ impl Entity {
         }
     }
 
+    pub fn path_with_name(&self) -> PathBuf {
+        PathBuf::from(self.path_str() + self.name_with_extension().as_str())
+    }
+
     pub fn path_dir(&self) -> PathBuf {
         if let Some(path) = self.global_path.parent() {
             path.to_path_buf()
@@ -189,6 +193,26 @@ impl Entity {
         file.read_to_string(&mut content)?;
 
         Ok(content)
+    }
+
+    pub fn set_path(&mut self, path: PathBuf) {
+        self.global_path.clone_from(&PathBuf::from(path));
+    }
+
+    pub fn set_name(&mut self, name: String) {
+        self.name.clone_from(&name);
+    }
+
+    pub fn set_extension(&mut self, extension: String) {
+        if extension != "" || extension != "None" {
+            self.extension.clone_from(&Some(extension));
+        } else {
+            self.extension = None;
+        }
+    }
+
+    pub fn set_permissions(&mut self, permissions: EntityPermissions) {
+        self.permissions.clone_from(&permissions);
     }
 }
 

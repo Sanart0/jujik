@@ -49,6 +49,19 @@ struct TabInfo {
 }
 
 #[derive(Default)]
+struct EntityCreate {
+    show: bool,
+    idx_tab: usize,
+    tab: Tab,
+    entity: Entity,
+    path: String,
+    name: String,
+    extension: String,
+    permissions: EntityPermissions,
+    change_permissions: ChangeEntityPermissions,
+}
+
+#[derive(Default)]
 struct EntityInfo {
     show: bool,
     idx_tab: usize,
@@ -188,6 +201,7 @@ pub struct JujikView {
     entitys_selection: EntitysSelection,
     pin_info: PinInfo,
     tab_info: TabInfo,
+    entity_create: EntityCreate,
     entity_info: EntityInfo,
     entitys_delete: EntitysDelete,
     entity_edit: EntityEdit,
@@ -267,6 +281,7 @@ impl JujikView {
             entitys_selection: EntitysSelection::default(),
             pin_info: PinInfo::default(),
             tab_info: TabInfo::default(),
+            entity_create: EntityCreate::default(),
             entity_info: EntityInfo::default(),
             entitys_delete: EntitysDelete::default(),
             entity_edit: EntityEdit::default(),
@@ -497,8 +512,7 @@ impl JujikView {
     }
 
     fn message(&self, ctx: &Context) {
-        let modal = Modal::new(Id::new("Message")).show(ctx, |ui| {
-        });
+        let modal = Modal::new(Id::new("Message")).show(ctx, |ui| {});
     }
 }
 
@@ -761,6 +775,14 @@ impl JujikView {
                     }
 
                     self.tab_context_menu(ui, &response, idx, tab);
+                }
+
+                if self.entity_create.show {
+                    self.entity_create(ctx);
+                }
+
+                if self.entity_create.change_permissions.show {
+                    self.entity_create_permissions(ctx);
                 }
 
                 if self.tab_info.show {
@@ -1092,11 +1114,18 @@ impl JujikView {
 
     fn tab_context_menu(&mut self, ui: &mut Ui, response: &Response, idx: usize, tab: &Tab) {
         response.context_menu(|ui| {
+            // let create_entity = ui.button(
+            //     RichText::new("Create Entity")
+            //         .color(self.style.text_color.into_color32())
+            //         .size(self.style.text_size),
+            // );
+
             let create_pin = ui.button(
                 RichText::new("Create Pin")
                     .color(self.style.text_color.into_color32())
                     .size(self.style.text_size),
             );
+
             let paste = ui.button(
                 RichText::new("Paste")
                     .color(self.style.text_color.into_color32())
@@ -1177,6 +1206,16 @@ impl JujikView {
                     .color(self.style.text_color.into_color32())
                     .size(self.style.text_size),
             );
+
+            // if create_entity.clicked() {
+            //     self.entity_create.idx_tab = idx;
+            //     self.entity_create.tab = tab.clone();
+            //     self.entity_create.entity.set_path(tab.path());
+            //     self.entity_create.path = tab.path_str();
+            //     self.entity_create.show = true;
+            //
+            //     ui.close_menu();
+            // }
 
             if create_pin.clicked() {
                 let _ = self
@@ -2751,6 +2790,446 @@ impl JujikView {
 
         if modal.backdrop_response.clicked() {
             self.entitys_delete.show = (false, false);
+        }
+    }
+
+    fn entity_create(&mut self, ctx: &Context) {
+        let modal = Modal::new(Id::new("Entity Create")).show(ctx, |ui| {
+            ui.vertical_centered_justified(|ui| {
+                ui.label(
+                    RichText::new("Entity Create")
+                        .color(self.style.text_color.into_color32())
+                        .size(self.style.text_size),
+                );
+
+                ui.separator();
+
+                Sides::new().show(
+                    ui,
+                    |ui| {
+                        ui.label(
+                            RichText::new("Path:")
+                                .color(self.style.text_color.into_color32())
+                                .size(self.style.text_size),
+                        );
+                    },
+                    |ui| {
+                        ui.text_edit_singleline(&mut self.entity_create.path);
+                    },
+                );
+
+                Sides::new().show(
+                    ui,
+                    |ui| {
+                        ui.label(
+                            RichText::new("Name:")
+                                .color(self.style.text_color.into_color32())
+                                .size(self.style.text_size),
+                        );
+                    },
+                    |ui| {
+                        ui.text_edit_singleline(&mut self.entity_create.name);
+                    },
+                );
+
+                Sides::new().show(
+                    ui,
+                    |ui| {
+                        ui.label(
+                            RichText::new("Extension:")
+                                .color(self.style.text_color.into_color32())
+                                .size(self.style.text_size),
+                        );
+                    },
+                    |ui| {
+                        ui.text_edit_singleline(&mut self.entity_create.extension);
+                    },
+                );
+
+                Sides::new().show(
+                    ui,
+                    |ui| {
+                        ui.label(
+                            RichText::new("Permissions:")
+                                .color(self.style.text_color.into_color32())
+                                .size(self.style.text_size),
+                        );
+                    },
+                    |ui| {
+                        let permissions = ui.add(
+                            Label::new(
+                                RichText::new(format!("{}", self.entity_create.permissions))
+                                    .color(self.style.text_color.into_color32())
+                                    .size(self.style.text_size),
+                            )
+                            .selectable(true),
+                        );
+
+                        permissions.context_menu(|ui| {
+                            let change = ui.button(
+                                RichText::new("Change")
+                                    .color(self.style.text_color.into_color32())
+                                    .size(self.style.text_size),
+                            );
+
+                            if change.clicked() {
+                                self.entity_create.change_permissions.user = (
+                                    self.entity_create.permissions.has(
+                                        EntityPermissionsCategory::User,
+                                        EntityPermissionsKind::Execute,
+                                    ),
+                                    self.entity_create.permissions.has(
+                                        EntityPermissionsCategory::User,
+                                        EntityPermissionsKind::Write,
+                                    ),
+                                    self.entity_create.permissions.has(
+                                        EntityPermissionsCategory::User,
+                                        EntityPermissionsKind::Read,
+                                    ),
+                                );
+                                self.entity_create.change_permissions.group = (
+                                    self.entity_create.permissions.has(
+                                        EntityPermissionsCategory::Group,
+                                        EntityPermissionsKind::Execute,
+                                    ),
+                                    self.entity_create.permissions.has(
+                                        EntityPermissionsCategory::Group,
+                                        EntityPermissionsKind::Write,
+                                    ),
+                                    self.entity_create.permissions.has(
+                                        EntityPermissionsCategory::Group,
+                                        EntityPermissionsKind::Read,
+                                    ),
+                                );
+                                self.entity_create.change_permissions.other = (
+                                    self.entity_create.permissions.has(
+                                        EntityPermissionsCategory::Other,
+                                        EntityPermissionsKind::Execute,
+                                    ),
+                                    self.entity_create.permissions.has(
+                                        EntityPermissionsCategory::Other,
+                                        EntityPermissionsKind::Write,
+                                    ),
+                                    self.entity_create.permissions.has(
+                                        EntityPermissionsCategory::Other,
+                                        EntityPermissionsKind::Read,
+                                    ),
+                                );
+
+                                self.entity_create.change_permissions.show = true;
+                            }
+                        });
+                    },
+                );
+
+                ui.separator();
+
+                Sides::new().show(
+                    ui,
+                    |_ui| {},
+                    |ui| {
+                        if ui
+                            .button(
+                                RichText::new("Save")
+                                    .color(self.style.text_color.into_color32())
+                                    .size(self.style.text_size),
+                            )
+                            .clicked()
+                        {
+                            let _ = self
+                                .controller
+                                .send(Command::SetConfig(Config::new(
+                                    self.style.clone(),
+                                    self.pins.clone(),
+                                    self.tabs.clone(),
+                                    self.current_tab_idx,
+                                    self.entitys_show.clone(),
+                                )))
+                                .inspect_err(JujikError::handle_err);
+
+                            self.entity_create
+                                .entity
+                                .set_path(PathBuf::from(self.entity_create.path.clone()));
+
+                            self.entity_create
+                                .entity
+                                .set_name(self.entity_create.name.clone());
+
+                            self.entity_create
+                                .entity
+                                .set_extension(self.entity_create.extension.clone());
+
+                            self.entity_create
+                                .entity
+                                .set_permissions(self.entity_create.permissions.clone());
+
+                            let _ = self
+                                .controller
+                                .send(Command::CreateEntity(
+                                    self.entity_create.idx_tab,
+                                    self.entity_create.tab.clone(),
+                                    self.entity_create.entity.clone(),
+                                ))
+                                .inspect_err(JujikError::handle_err);
+
+                            self.entity_info.show = false;
+                        }
+                    },
+                );
+            });
+        });
+
+        if modal.backdrop_response.clicked() {
+            self.entity_create.show = false;
+        }
+    }
+
+    fn entity_create_permissions(&mut self, ctx: &Context) {
+        let modal = Modal::new(Id::new("Entity Create Permissions")).show(ctx, |ui| {
+            ui.vertical_centered_justified(|ui| {
+                ui.label(
+                    RichText::new(format!("Create Permissions: {}", self.entity_create.name))
+                        .color(self.style.text_color.into_color32())
+                        .size(self.style.text_size),
+                );
+
+                ui.separator();
+
+                Sides::new().show(
+                    ui,
+                    |ui| {
+                        ui.label(
+                            RichText::new("User:")
+                                .color(self.style.text_color.into_color32())
+                                .size(self.style.text_size),
+                        );
+                    },
+                    |ui| {
+                        ui.checkbox(
+                            &mut self.entity_create.change_permissions.user.0,
+                            RichText::new("execute")
+                                .color(self.style.text_color.into_color32())
+                                .size(self.style.text_size),
+                        );
+                        ui.checkbox(
+                            &mut self.entity_create.change_permissions.user.1,
+                            RichText::new("write")
+                                .color(self.style.text_color.into_color32())
+                                .size(self.style.text_size),
+                        );
+                        ui.checkbox(
+                            &mut self.entity_create.change_permissions.user.2,
+                            RichText::new("read")
+                                .color(self.style.text_color.into_color32())
+                                .size(self.style.text_size),
+                        );
+                    },
+                );
+
+                Sides::new().show(
+                    ui,
+                    |ui| {
+                        ui.label(
+                            RichText::new("Group:")
+                                .color(self.style.text_color.into_color32())
+                                .size(self.style.text_size),
+                        );
+                    },
+                    |ui| {
+                        ui.checkbox(
+                            &mut self.entity_create.change_permissions.group.0,
+                            RichText::new("execute")
+                                .color(self.style.text_color.into_color32())
+                                .size(self.style.text_size),
+                        );
+                        ui.checkbox(
+                            &mut self.entity_create.change_permissions.group.1,
+                            RichText::new("write")
+                                .color(self.style.text_color.into_color32())
+                                .size(self.style.text_size),
+                        );
+                        ui.checkbox(
+                            &mut self.entity_create.change_permissions.group.2,
+                            RichText::new("read")
+                                .color(self.style.text_color.into_color32())
+                                .size(self.style.text_size),
+                        );
+                    },
+                );
+
+                Sides::new().show(
+                    ui,
+                    |ui| {
+                        ui.label(
+                            RichText::new("Other:")
+                                .color(self.style.text_color.into_color32())
+                                .size(self.style.text_size),
+                        );
+                    },
+                    |ui| {
+                        ui.checkbox(
+                            &mut self.entity_create.change_permissions.other.0,
+                            RichText::new("execute")
+                                .color(self.style.text_color.into_color32())
+                                .size(self.style.text_size),
+                        );
+                        ui.checkbox(
+                            &mut self.entity_create.change_permissions.other.1,
+                            RichText::new("write")
+                                .color(self.style.text_color.into_color32())
+                                .size(self.style.text_size),
+                        );
+                        ui.checkbox(
+                            &mut self.entity_create.change_permissions.other.2,
+                            RichText::new("read")
+                                .color(self.style.text_color.into_color32())
+                                .size(self.style.text_size),
+                        );
+                    },
+                );
+
+                ui.separator();
+
+                Sides::new().show(
+                    ui,
+                    |_ui| {},
+                    |ui| {
+                        if ui
+                            .button(
+                                RichText::new("Save")
+                                    .color(self.style.text_color.into_color32())
+                                    .size(self.style.text_size),
+                            )
+                            .clicked()
+                        {
+                            let _ = self
+                                .controller
+                                .send(Command::SetConfig(Config::new(
+                                    self.style.clone(),
+                                    self.pins.clone(),
+                                    self.tabs.clone(),
+                                    self.current_tab_idx,
+                                    self.entitys_show.clone(),
+                                )))
+                                .inspect_err(JujikError::handle_err);
+
+                            if self.entity_create.change_permissions.user.0 {
+                                self.entity_create.permissions.set(
+                                    EntityPermissionsCategory::User,
+                                    EntityPermissionsKind::Execute,
+                                );
+                            } else {
+                                self.entity_create.permissions.unset(
+                                    EntityPermissionsCategory::User,
+                                    EntityPermissionsKind::Execute,
+                                );
+                            }
+
+                            if self.entity_create.change_permissions.user.1 {
+                                self.entity_create.permissions.set(
+                                    EntityPermissionsCategory::User,
+                                    EntityPermissionsKind::Write,
+                                );
+                            } else {
+                                self.entity_create.permissions.unset(
+                                    EntityPermissionsCategory::User,
+                                    EntityPermissionsKind::Write,
+                                );
+                            }
+
+                            if self.entity_create.change_permissions.user.2 {
+                                self.entity_create.permissions.set(
+                                    EntityPermissionsCategory::User,
+                                    EntityPermissionsKind::Read,
+                                );
+                            } else {
+                                self.entity_create.permissions.unset(
+                                    EntityPermissionsCategory::User,
+                                    EntityPermissionsKind::Read,
+                                );
+                            }
+
+                            if self.entity_create.change_permissions.group.0 {
+                                self.entity_create.permissions.set(
+                                    EntityPermissionsCategory::Group,
+                                    EntityPermissionsKind::Execute,
+                                );
+                            } else {
+                                self.entity_create.permissions.unset(
+                                    EntityPermissionsCategory::Group,
+                                    EntityPermissionsKind::Execute,
+                                );
+                            }
+
+                            if self.entity_create.change_permissions.group.1 {
+                                self.entity_create.permissions.set(
+                                    EntityPermissionsCategory::Group,
+                                    EntityPermissionsKind::Write,
+                                );
+                            } else {
+                                self.entity_create.permissions.unset(
+                                    EntityPermissionsCategory::Group,
+                                    EntityPermissionsKind::Write,
+                                );
+                            }
+
+                            if self.entity_create.change_permissions.group.2 {
+                                self.entity_create.permissions.set(
+                                    EntityPermissionsCategory::Group,
+                                    EntityPermissionsKind::Read,
+                                );
+                            } else {
+                                self.entity_create.permissions.unset(
+                                    EntityPermissionsCategory::Group,
+                                    EntityPermissionsKind::Read,
+                                );
+                            }
+
+                            if self.entity_create.change_permissions.other.0 {
+                                self.entity_create.permissions.set(
+                                    EntityPermissionsCategory::Other,
+                                    EntityPermissionsKind::Execute,
+                                );
+                            } else {
+                                self.entity_create.permissions.unset(
+                                    EntityPermissionsCategory::Other,
+                                    EntityPermissionsKind::Execute,
+                                );
+                            }
+
+                            if self.entity_create.change_permissions.other.1 {
+                                self.entity_create.permissions.set(
+                                    EntityPermissionsCategory::Other,
+                                    EntityPermissionsKind::Write,
+                                );
+                            } else {
+                                self.entity_create.permissions.unset(
+                                    EntityPermissionsCategory::Other,
+                                    EntityPermissionsKind::Write,
+                                );
+                            }
+
+                            if self.entity_create.change_permissions.other.2 {
+                                self.entity_create.permissions.set(
+                                    EntityPermissionsCategory::Other,
+                                    EntityPermissionsKind::Read,
+                                );
+                            } else {
+                                self.entity_create.permissions.unset(
+                                    EntityPermissionsCategory::Other,
+                                    EntityPermissionsKind::Read,
+                                );
+                            }
+
+                            self.entity_create.change_permissions.show = false;
+                        }
+                    },
+                );
+            });
+        });
+
+        if modal.backdrop_response.clicked() {
+            self.entity_create.change_permissions.show = false;
         }
     }
 
