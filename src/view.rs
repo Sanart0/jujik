@@ -31,6 +31,12 @@ use std::{
 use winit::platform::wayland::EventLoopBuilderExtWayland;
 
 #[derive(Default)]
+struct Message {
+    show: bool,
+    value: String,
+}
+
+#[derive(Default)]
 struct PinInfo {
     show: bool,
     idx: usize,
@@ -53,12 +59,10 @@ struct EntityCreate {
     show: bool,
     idx_tab: usize,
     tab: Tab,
-    entity: Entity,
+    entity_ghost: Entity,
     path: String,
     name: String,
     extension: String,
-    permissions: EntityPermissions,
-    change_permissions: ChangeEntityPermissions,
 }
 
 #[derive(Default)]
@@ -195,6 +199,7 @@ pub struct JujikView {
     style: JujikStyle,
     pins: Vec<Pin>,
     tabs: Vec<Tab>,
+    message: Message,
     entitys_show: EntitysShowColumn,
     entitys_sortby_info: EntitysSortByInfo,
     current_tab_idx: usize,
@@ -242,6 +247,10 @@ impl App for JujikView {
 
         let _ = self.handle_commad(ctx).inspect_err(JujikError::handle_err);
 
+        if self.message.show {
+            self.message(ctx);
+        }
+
         //TODO meybe do not need
         ctx.request_repaint();
     }
@@ -275,6 +284,7 @@ impl JujikView {
             style: JujikStyle::default(),
             pins: Vec::new(),
             tabs: Vec::new(),
+            message: Message::default(),
             entitys_show: EntitysShowColumn::default(),
             entitys_sortby_info: EntitysSortByInfo::default(),
             current_tab_idx: 0,
@@ -339,6 +349,10 @@ impl JujikView {
                     self.pins.clone_from(&pins);
                     self.tabs.clone_from(&tabs);
                 }
+                Command::Error(err) => {
+                    self.message.show = true;
+                    self.message.value = format!("{:?}", err);
+                }
                 Command::Drop => {
                     ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                 }
@@ -384,6 +398,17 @@ impl JujikView {
                 |ui| {
                     if ui
                         .button(
+                            RichText::new("Open")
+                                .color(self.style.text_color.into_color32())
+                                .size(self.style.text_size),
+                        )
+                        .clicked()
+                    {
+                        ui.close_menu();
+                    }
+
+                    if ui
+                        .button(
                             RichText::new("Reset Config")
                                 .color(self.style.text_color.into_color32())
                                 .size(self.style.text_size),
@@ -394,6 +419,8 @@ impl JujikView {
                             .controller
                             .send(Command::SetConfig(Config::default()))
                             .inspect_err(JujikError::handle_err);
+
+                        ui.close_menu();
                     }
 
                     if ui
@@ -511,8 +538,28 @@ impl JujikView {
         }
     }
 
-    fn message(&self, ctx: &Context) {
-        let modal = Modal::new(Id::new("Message")).show(ctx, |ui| {});
+    fn message(&mut self, ctx: &Context) {
+        let modal = Modal::new(Id::new("Message")).show(ctx, |ui| {
+            ui.vertical_centered(|ui| {
+                ui.label(
+                    RichText::new("Message")
+                        .color(self.style.text_color.into_color32())
+                        .size(self.style.text_size),
+                );
+
+                ui.separator();
+
+                ui.label(
+                    RichText::new(format!("{}", self.message.value))
+                        .color(self.style.text_color.into_color32())
+                        .size(self.style.text_size),
+                );
+            });
+        });
+
+        if modal.backdrop_response.clicked() {
+            self.message.show = false;
+        }
     }
 }
 
@@ -767,6 +814,7 @@ impl JujikView {
                     if response.clicked() {
                         self.current_tab_idx = idx;
                         self.entitys_selection.entitys.clear();
+                        self.entity_edit.changed = false;
 
                         let _ = self
                             .controller
@@ -779,10 +827,6 @@ impl JujikView {
 
                 if self.entity_create.show {
                     self.entity_create(ctx);
-                }
-
-                if self.entity_create.change_permissions.show {
-                    self.entity_create_permissions(ctx);
                 }
 
                 if self.tab_info.show {
@@ -852,11 +896,12 @@ impl JujikView {
         if let Some(entitys) = tab.entitys() {
             ScrollArea::horizontal().show(ui, |ui| {
                 TableBuilder::new(ui)
-                    // .resizable(true)
+                    .resizable(true)
                     .cell_layout(Layout::left_to_right(Align::Center))
                     .sense(Sense::click())
                     .striped(true)
                     .column(Column::exact(40.0))
+                    .column(Column::remainder())
                     .column(Column::remainder())
                     .column(Column::remainder())
                     .column(Column::remainder())
@@ -955,6 +1000,7 @@ impl JujikView {
                                 });
                             });
                         }
+                        header.col(|ui| {});
                     })
                     .body(|mut body| {
                         for (idx_entity, entity) in entitys.iter().enumerate() {
@@ -1065,6 +1111,7 @@ impl JujikView {
                                         });
                                     });
                                 }
+                                row.col(|ui| {});
 
                                 self.entity_context_menu(
                                     &row.response(),
@@ -1114,11 +1161,11 @@ impl JujikView {
 
     fn tab_context_menu(&mut self, ui: &mut Ui, response: &Response, idx: usize, tab: &Tab) {
         response.context_menu(|ui| {
-            // let create_entity = ui.button(
-            //     RichText::new("Create Entity")
-            //         .color(self.style.text_color.into_color32())
-            //         .size(self.style.text_size),
-            // );
+            let create_entity = ui.button(
+                RichText::new("Create Entity")
+                    .color(self.style.text_color.into_color32())
+                    .size(self.style.text_size),
+            );
 
             let create_pin = ui.button(
                 RichText::new("Create Pin")
@@ -1207,15 +1254,16 @@ impl JujikView {
                     .size(self.style.text_size),
             );
 
-            // if create_entity.clicked() {
-            //     self.entity_create.idx_tab = idx;
-            //     self.entity_create.tab = tab.clone();
-            //     self.entity_create.entity.set_path(tab.path());
-            //     self.entity_create.path = tab.path_str();
-            //     self.entity_create.show = true;
-            //
-            //     ui.close_menu();
-            // }
+            if create_entity.clicked() {
+                self.entity_create.idx_tab = idx;
+                self.entity_create.tab = tab.clone();
+                self.entity_create.name = String::new();
+                self.entity_create.path = tab.path_str();
+                self.entity_create.extension = String::new();
+                self.entity_create.show = true;
+
+                ui.close_menu();
+            }
 
             if create_pin.clicked() {
                 let _ = self
@@ -1411,7 +1459,7 @@ impl JujikView {
         });
     }
 
-    fn view_text(&self, ui: &mut Ui, entity: &Entity) {
+    fn view_text(&mut self, ui: &mut Ui, entity: &Entity) {
         match entity.content() {
             Ok(content) => {
                 ScrollArea::both().show(ui, |ui| {
@@ -1423,7 +1471,12 @@ impl JujikView {
                 });
             }
             Err(err) => {
-                //TODO Handle error
+                self.message.show = true;
+                self.message.value = format!(
+                    "Can not read Entity {} content\n{}",
+                    entity.name_with_extension(),
+                    err
+                );
             }
         }
     }
@@ -2502,10 +2555,12 @@ impl JujikView {
                                     .username()
                                     .ne(&self.finder_info.change_owners.username)
                                 {
-                                    if let Err(_) = self.finder_info.owners.set_username(
+                                    if let Err(err) = self.finder_info.owners.set_username(
                                         self.finder_info.change_owners.username.clone(),
                                     ) {
-                                        //TODO handle error
+                                        self.message.show = true;
+                                        self.message.value = format!("{}", err);
+
                                         self.finder_info
                                             .change_owners
                                             .username
@@ -2519,10 +2574,12 @@ impl JujikView {
                                     .groupname()
                                     .ne(&self.finder_info.change_owners.groupname)
                                 {
-                                    if let Err(_) = self.finder_info.owners.set_groupname(
+                                    if let Err(err) = self.finder_info.owners.set_groupname(
                                         self.finder_info.change_owners.groupname.clone(),
                                     ) {
-                                        //TODO handle error
+                                        self.message.show = true;
+                                        self.message.value = format!("{}", err);
+
                                         self.finder_info
                                             .change_owners
                                             .groupname
@@ -2846,82 +2903,6 @@ impl JujikView {
                     },
                 );
 
-                Sides::new().show(
-                    ui,
-                    |ui| {
-                        ui.label(
-                            RichText::new("Permissions:")
-                                .color(self.style.text_color.into_color32())
-                                .size(self.style.text_size),
-                        );
-                    },
-                    |ui| {
-                        let permissions = ui.add(
-                            Label::new(
-                                RichText::new(format!("{}", self.entity_create.permissions))
-                                    .color(self.style.text_color.into_color32())
-                                    .size(self.style.text_size),
-                            )
-                            .selectable(true),
-                        );
-
-                        permissions.context_menu(|ui| {
-                            let change = ui.button(
-                                RichText::new("Change")
-                                    .color(self.style.text_color.into_color32())
-                                    .size(self.style.text_size),
-                            );
-
-                            if change.clicked() {
-                                self.entity_create.change_permissions.user = (
-                                    self.entity_create.permissions.has(
-                                        EntityPermissionsCategory::User,
-                                        EntityPermissionsKind::Execute,
-                                    ),
-                                    self.entity_create.permissions.has(
-                                        EntityPermissionsCategory::User,
-                                        EntityPermissionsKind::Write,
-                                    ),
-                                    self.entity_create.permissions.has(
-                                        EntityPermissionsCategory::User,
-                                        EntityPermissionsKind::Read,
-                                    ),
-                                );
-                                self.entity_create.change_permissions.group = (
-                                    self.entity_create.permissions.has(
-                                        EntityPermissionsCategory::Group,
-                                        EntityPermissionsKind::Execute,
-                                    ),
-                                    self.entity_create.permissions.has(
-                                        EntityPermissionsCategory::Group,
-                                        EntityPermissionsKind::Write,
-                                    ),
-                                    self.entity_create.permissions.has(
-                                        EntityPermissionsCategory::Group,
-                                        EntityPermissionsKind::Read,
-                                    ),
-                                );
-                                self.entity_create.change_permissions.other = (
-                                    self.entity_create.permissions.has(
-                                        EntityPermissionsCategory::Other,
-                                        EntityPermissionsKind::Execute,
-                                    ),
-                                    self.entity_create.permissions.has(
-                                        EntityPermissionsCategory::Other,
-                                        EntityPermissionsKind::Write,
-                                    ),
-                                    self.entity_create.permissions.has(
-                                        EntityPermissionsCategory::Other,
-                                        EntityPermissionsKind::Read,
-                                    ),
-                                );
-
-                                self.entity_create.change_permissions.show = true;
-                            }
-                        });
-                    },
-                );
-
                 ui.separator();
 
                 Sides::new().show(
@@ -2947,32 +2928,24 @@ impl JujikView {
                                 )))
                                 .inspect_err(JujikError::handle_err);
 
-                            self.entity_create
-                                .entity
-                                .set_path(PathBuf::from(self.entity_create.path.clone()));
-
-                            self.entity_create
-                                .entity
-                                .set_name(self.entity_create.name.clone());
-
-                            self.entity_create
-                                .entity
-                                .set_extension(self.entity_create.extension.clone());
-
-                            self.entity_create
-                                .entity
-                                .set_permissions(self.entity_create.permissions.clone());
+                            if let Ok(entity_ghost) = Entity::ghost(
+                                PathBuf::from(self.entity_create.path.clone()),
+                                self.entity_create.name.clone(),
+                                self.entity_create.extension.clone(),
+                            ) {
+                                self.entity_create.entity_ghost.clone_from(&entity_ghost);
+                            }
 
                             let _ = self
                                 .controller
                                 .send(Command::CreateEntity(
                                     self.entity_create.idx_tab,
                                     self.entity_create.tab.clone(),
-                                    self.entity_create.entity.clone(),
+                                    self.entity_create.entity_ghost.clone(),
                                 ))
                                 .inspect_err(JujikError::handle_err);
 
-                            self.entity_info.show = false;
+                            self.entity_create.show = false;
                         }
                     },
                 );
@@ -2981,255 +2954,6 @@ impl JujikView {
 
         if modal.backdrop_response.clicked() {
             self.entity_create.show = false;
-        }
-    }
-
-    fn entity_create_permissions(&mut self, ctx: &Context) {
-        let modal = Modal::new(Id::new("Entity Create Permissions")).show(ctx, |ui| {
-            ui.vertical_centered_justified(|ui| {
-                ui.label(
-                    RichText::new(format!("Create Permissions: {}", self.entity_create.name))
-                        .color(self.style.text_color.into_color32())
-                        .size(self.style.text_size),
-                );
-
-                ui.separator();
-
-                Sides::new().show(
-                    ui,
-                    |ui| {
-                        ui.label(
-                            RichText::new("User:")
-                                .color(self.style.text_color.into_color32())
-                                .size(self.style.text_size),
-                        );
-                    },
-                    |ui| {
-                        ui.checkbox(
-                            &mut self.entity_create.change_permissions.user.0,
-                            RichText::new("execute")
-                                .color(self.style.text_color.into_color32())
-                                .size(self.style.text_size),
-                        );
-                        ui.checkbox(
-                            &mut self.entity_create.change_permissions.user.1,
-                            RichText::new("write")
-                                .color(self.style.text_color.into_color32())
-                                .size(self.style.text_size),
-                        );
-                        ui.checkbox(
-                            &mut self.entity_create.change_permissions.user.2,
-                            RichText::new("read")
-                                .color(self.style.text_color.into_color32())
-                                .size(self.style.text_size),
-                        );
-                    },
-                );
-
-                Sides::new().show(
-                    ui,
-                    |ui| {
-                        ui.label(
-                            RichText::new("Group:")
-                                .color(self.style.text_color.into_color32())
-                                .size(self.style.text_size),
-                        );
-                    },
-                    |ui| {
-                        ui.checkbox(
-                            &mut self.entity_create.change_permissions.group.0,
-                            RichText::new("execute")
-                                .color(self.style.text_color.into_color32())
-                                .size(self.style.text_size),
-                        );
-                        ui.checkbox(
-                            &mut self.entity_create.change_permissions.group.1,
-                            RichText::new("write")
-                                .color(self.style.text_color.into_color32())
-                                .size(self.style.text_size),
-                        );
-                        ui.checkbox(
-                            &mut self.entity_create.change_permissions.group.2,
-                            RichText::new("read")
-                                .color(self.style.text_color.into_color32())
-                                .size(self.style.text_size),
-                        );
-                    },
-                );
-
-                Sides::new().show(
-                    ui,
-                    |ui| {
-                        ui.label(
-                            RichText::new("Other:")
-                                .color(self.style.text_color.into_color32())
-                                .size(self.style.text_size),
-                        );
-                    },
-                    |ui| {
-                        ui.checkbox(
-                            &mut self.entity_create.change_permissions.other.0,
-                            RichText::new("execute")
-                                .color(self.style.text_color.into_color32())
-                                .size(self.style.text_size),
-                        );
-                        ui.checkbox(
-                            &mut self.entity_create.change_permissions.other.1,
-                            RichText::new("write")
-                                .color(self.style.text_color.into_color32())
-                                .size(self.style.text_size),
-                        );
-                        ui.checkbox(
-                            &mut self.entity_create.change_permissions.other.2,
-                            RichText::new("read")
-                                .color(self.style.text_color.into_color32())
-                                .size(self.style.text_size),
-                        );
-                    },
-                );
-
-                ui.separator();
-
-                Sides::new().show(
-                    ui,
-                    |_ui| {},
-                    |ui| {
-                        if ui
-                            .button(
-                                RichText::new("Save")
-                                    .color(self.style.text_color.into_color32())
-                                    .size(self.style.text_size),
-                            )
-                            .clicked()
-                        {
-                            let _ = self
-                                .controller
-                                .send(Command::SetConfig(Config::new(
-                                    self.style.clone(),
-                                    self.pins.clone(),
-                                    self.tabs.clone(),
-                                    self.current_tab_idx,
-                                    self.entitys_show.clone(),
-                                )))
-                                .inspect_err(JujikError::handle_err);
-
-                            if self.entity_create.change_permissions.user.0 {
-                                self.entity_create.permissions.set(
-                                    EntityPermissionsCategory::User,
-                                    EntityPermissionsKind::Execute,
-                                );
-                            } else {
-                                self.entity_create.permissions.unset(
-                                    EntityPermissionsCategory::User,
-                                    EntityPermissionsKind::Execute,
-                                );
-                            }
-
-                            if self.entity_create.change_permissions.user.1 {
-                                self.entity_create.permissions.set(
-                                    EntityPermissionsCategory::User,
-                                    EntityPermissionsKind::Write,
-                                );
-                            } else {
-                                self.entity_create.permissions.unset(
-                                    EntityPermissionsCategory::User,
-                                    EntityPermissionsKind::Write,
-                                );
-                            }
-
-                            if self.entity_create.change_permissions.user.2 {
-                                self.entity_create.permissions.set(
-                                    EntityPermissionsCategory::User,
-                                    EntityPermissionsKind::Read,
-                                );
-                            } else {
-                                self.entity_create.permissions.unset(
-                                    EntityPermissionsCategory::User,
-                                    EntityPermissionsKind::Read,
-                                );
-                            }
-
-                            if self.entity_create.change_permissions.group.0 {
-                                self.entity_create.permissions.set(
-                                    EntityPermissionsCategory::Group,
-                                    EntityPermissionsKind::Execute,
-                                );
-                            } else {
-                                self.entity_create.permissions.unset(
-                                    EntityPermissionsCategory::Group,
-                                    EntityPermissionsKind::Execute,
-                                );
-                            }
-
-                            if self.entity_create.change_permissions.group.1 {
-                                self.entity_create.permissions.set(
-                                    EntityPermissionsCategory::Group,
-                                    EntityPermissionsKind::Write,
-                                );
-                            } else {
-                                self.entity_create.permissions.unset(
-                                    EntityPermissionsCategory::Group,
-                                    EntityPermissionsKind::Write,
-                                );
-                            }
-
-                            if self.entity_create.change_permissions.group.2 {
-                                self.entity_create.permissions.set(
-                                    EntityPermissionsCategory::Group,
-                                    EntityPermissionsKind::Read,
-                                );
-                            } else {
-                                self.entity_create.permissions.unset(
-                                    EntityPermissionsCategory::Group,
-                                    EntityPermissionsKind::Read,
-                                );
-                            }
-
-                            if self.entity_create.change_permissions.other.0 {
-                                self.entity_create.permissions.set(
-                                    EntityPermissionsCategory::Other,
-                                    EntityPermissionsKind::Execute,
-                                );
-                            } else {
-                                self.entity_create.permissions.unset(
-                                    EntityPermissionsCategory::Other,
-                                    EntityPermissionsKind::Execute,
-                                );
-                            }
-
-                            if self.entity_create.change_permissions.other.1 {
-                                self.entity_create.permissions.set(
-                                    EntityPermissionsCategory::Other,
-                                    EntityPermissionsKind::Write,
-                                );
-                            } else {
-                                self.entity_create.permissions.unset(
-                                    EntityPermissionsCategory::Other,
-                                    EntityPermissionsKind::Write,
-                                );
-                            }
-
-                            if self.entity_create.change_permissions.other.2 {
-                                self.entity_create.permissions.set(
-                                    EntityPermissionsCategory::Other,
-                                    EntityPermissionsKind::Read,
-                                );
-                            } else {
-                                self.entity_create.permissions.unset(
-                                    EntityPermissionsCategory::Other,
-                                    EntityPermissionsKind::Read,
-                                );
-                            }
-
-                            self.entity_create.change_permissions.show = false;
-                        }
-                    },
-                );
-            });
-        });
-
-        if modal.backdrop_response.clicked() {
-            self.entity_create.change_permissions.show = false;
         }
     }
 
@@ -3931,10 +3655,12 @@ impl JujikView {
                                     .username()
                                     .ne(&self.entity_info.change_owners.username)
                                 {
-                                    if let Err(_) = self.entity_info.owners.set_username(
+                                    if let Err(err) = self.entity_info.owners.set_username(
                                         self.entity_info.change_owners.username.clone(),
                                     ) {
-                                        //TODO handle error
+                                        self.message.show = true;
+                                        self.message.value = format!("{}", err);
+
                                         self.entity_info
                                             .change_owners
                                             .username
@@ -3948,10 +3674,12 @@ impl JujikView {
                                     .groupname()
                                     .ne(&self.entity_info.change_owners.groupname)
                                 {
-                                    if let Err(_) = self.entity_info.owners.set_groupname(
+                                    if let Err(err) = self.entity_info.owners.set_groupname(
                                         self.entity_info.change_owners.groupname.clone(),
                                     ) {
-                                        //TODO handle error
+                                        self.message.show = true;
+                                        self.message.value = format!("{}", err);
+
                                         self.entity_info
                                             .change_owners
                                             .groupname

@@ -111,19 +111,7 @@ impl JujikModel {
                                 if entity_ghost.is_dir() {
                                     match fs::create_dir_all(entity_ghost.path()) {
                                         Ok(_) => {
-                                            match fs::set_permissions(
-                                                entity_ghost.path(),
-                                                entity_ghost.permissions().clone().into(),
-                                            ) {
-                                                Ok(_) => {
-                                                    self.controller
-                                                        .send(Command::UpdateTab(idx))?;
-                                                }
-                                                Err(err) => {
-                                                    self.controller
-                                                        .send(Command::Error(Box::new(err)))?;
-                                                }
-                                            };
+                                            self.controller.send(Command::UpdateTab(idx))?;
                                         }
                                         Err(err) => {
                                             self.controller.send(Command::Error(Box::new(err)))?;
@@ -132,19 +120,7 @@ impl JujikModel {
                                 } else {
                                     match File::create(entity_ghost.path_with_name()) {
                                         Ok(_) => {
-                                            match fs::set_permissions(
-                                                entity_ghost.path(),
-                                                entity_ghost.permissions().clone().into(),
-                                            ) {
-                                                Ok(_) => {
-                                                    self.controller
-                                                        .send(Command::UpdateTab(idx))?;
-                                                }
-                                                Err(err) => {
-                                                    self.controller
-                                                        .send(Command::Error(Box::new(err)))?;
-                                                }
-                                            };
+                                            self.controller.send(Command::UpdateTab(idx))?;
                                         }
                                         Err(err) => {
                                             self.controller.send(Command::Error(Box::new(err)))?;
@@ -160,8 +136,8 @@ impl JujikModel {
                                         fs::remove_file(entity.path())
                                     };
 
-                                    if let Err(_) = res {
-                                        //TODO Handle error
+                                    if let Err(err) = res {
+                                        self.controller.send(Command::Error(Box::new(err)))?;
                                     }
                                 }
 
@@ -174,8 +150,8 @@ impl JujikModel {
 
                                     let res = fs::copy(entity.path(), pathbuf);
 
-                                    if let Err(_) = res {
-                                        //TODO Handle error
+                                    if let Err(err) = res {
+                                        self.controller.send(Command::Error(Box::new(err)))?;
                                     }
                                 }
 
@@ -188,8 +164,8 @@ impl JujikModel {
 
                                     let res = fs::rename(entity.path(), pathbuf.clone());
 
-                                    if let Err(_) = res {
-                                        //TODO Handle error
+                                    if let Err(err) = res {
+                                        self.controller.send(Command::Error(Box::new(err)))?;
                                     }
                                 }
 
@@ -201,8 +177,8 @@ impl JujikModel {
 
                                 let res = fs::rename(entity.path(), path);
 
-                                if let Err(_) = res {
-                                    //TODO Handle error
+                                if let Err(err) = res {
+                                    self.controller.send(Command::Error(Box::new(err)))?;
                                 } else {
                                     self.controller.send(Command::Update)?;
                                 }
@@ -219,8 +195,8 @@ impl JujikModel {
 
                                 let res = fs::rename(entity.path(), path);
 
-                                if let Err(_) = res {
-                                    //TODO Handle error
+                                if let Err(err) = res {
+                                    self.controller.send(Command::Error(Box::new(err)))?;
                                 } else {
                                     self.controller.send(Command::Update)?;
                                 }
@@ -234,8 +210,8 @@ impl JujikModel {
                             ) => {
                                 let res = fs::set_permissions(entity.path(), permissions.into());
 
-                                if let Err(_) = res {
-                                    //TODO Handle error
+                                if let Err(err) = res {
+                                    self.controller.send(Command::Error(Box::new(err)))?;
                                 } else {
                                     self.controller.send(Command::Update)?;
                                 }
@@ -253,8 +229,8 @@ impl JujikModel {
                                     Some(owners.gid()),
                                 );
 
-                                if let Err(_) = res {
-                                    //TODO Handle error
+                                if let Err(err) = res {
+                                    self.controller.send(Command::Error(Box::new(err)))?;
                                 } else {
                                     self.controller.send(Command::Update)?;
                                 }
@@ -262,8 +238,8 @@ impl JujikModel {
                             Command::ChangeEntityContent(idx, tab, entity, content) => {
                                 let res = fs::write(entity.path(), content);
 
-                                if let Err(_) = res {
-                                    //TODO Handle error
+                                if let Err(err) = res {
+                                    self.controller.send(Command::Error(Box::new(err)))?;
                                 } else {
                                     self.controller.send(Command::Update)?;
                                 }

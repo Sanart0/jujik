@@ -74,8 +74,10 @@ impl EntityOwners {
             self.username.clone_from(&username);
             self.uid = user.uid.as_raw();
         } else {
-            //TODO handle err
-            return Err(JujikError::Other(format!("")));
+            return Err(JujikError::Other(format!(
+                "Can not set User from username: {}",
+                username
+            )));
         }
 
         Ok(())
@@ -86,8 +88,10 @@ impl EntityOwners {
             self.groupname.clone_from(&groupname);
             self.gid = group.gid.as_raw();
         } else {
-            //TODO handle err
-            return Err(JujikError::Other(format!("")));
+            return Err(JujikError::Other(format!(
+                "Can not set Group from groupname: {}",
+                groupname
+            )));
         }
 
         Ok(())

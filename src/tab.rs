@@ -198,8 +198,6 @@ impl Tab {
         for dir_entry in read_dir(pathbuf.clone())? {
             if let Ok(entity) = Entity::new(dir_entry?.path()) {
                 entitys.push(entity);
-            } else {
-                //TODO Handle error
             }
         }
 

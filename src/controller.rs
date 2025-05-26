@@ -15,21 +15,24 @@ impl JujikController {
         model: Sender<Command>,
         view: Sender<Command>,
         controller: Receiver<Command>,
-    ) -> Self {
+    ) -> Result<Self, JujikError> {
         let config = match Config::load() {
             Ok(config) => config,
-            Err(_) => {
-                //TODO Handle error
+            Err(err) => {
+                view.send(Command::Error(Box::new(format!(
+                    "Can not read Config at Controller start\n{}",
+                    err
+                ))))?;
                 Config::default()
             }
         };
 
-        Self {
+        Ok(Self {
             model,
             view,
             controller,
             config: config,
-        }
+        })
     }
 
     pub fn run(mut self) -> Result<JoinHandle<Result<(), JujikError>>, JujikError> {
@@ -145,8 +148,8 @@ impl JujikController {
                             }
                             Command::UpdateTab(idx) => {
                                 if let Some(tab) = self.config.tabs.get_mut(idx) {
-                                    if let Err(_) = tab.update_entitys() {
-                                        //TODO Handle error
+                                    if let Err(err) = tab.update_entitys() {
+                                        self.view.send(Command::Error(Box::new(err)))?;
                                     }
                                 }
 
@@ -193,10 +196,17 @@ impl JujikController {
                                             idx_tab, tab, idx_entity, entitys, pathbuf,
                                         ))?;
                                     } else {
-                                        //TODO hande error path does not a directory
+                                        self.view.send(Command::Error(Box::new(
+                                            JujikError::Other(format!(
+                                                "Path is not directory:\n{:?}",
+                                                pathbuf
+                                            )),
+                                        )))?;
                                     }
                                 } else {
-                                    //TODO hande error path does not exist
+                                    self.view.send(Command::Error(Box::new(JujikError::Other(
+                                        format!("Path does not exist:\n{:?}", pathbuf),
+                                    ))))?;
                                 }
                             }
                             Command::MoveEntitys(idx_tab, tab, idx_entity, entitys, pathbuf) => {
@@ -206,10 +216,17 @@ impl JujikController {
                                             idx_tab, tab, idx_entity, entitys, pathbuf,
                                         ))?;
                                     } else {
-                                        //TODO hande error path does not a directory
+                                        self.view.send(Command::Error(Box::new(
+                                            JujikError::Other(format!(
+                                                "Path is not directory:\n{:?}",
+                                                pathbuf
+                                            )),
+                                        )))?;
                                     }
                                 } else {
-                                    //TODO hande error path does not exist
+                                    self.view.send(Command::Error(Box::new(JujikError::Other(
+                                        format!("Path does not exist:\n{:?}", pathbuf),
+                                    ))))?;
                                 }
                             }
                             Command::ChangeEntityName(idx_tab, tab, idx_entity, entity, name) => {
@@ -280,7 +297,7 @@ impl JujikController {
                             // Config
                             Command::SetConfig(config) => {
                                 self.config = config.clone();
-                                self.write_config();
+                                self.write_config()?;
                                 self.view.send(Command::SetConfig(config))?;
                             }
 
@@ -291,7 +308,7 @@ impl JujikController {
                             }
                             Command::Error(err) => self.view.send(Command::Error(err))?,
                             Command::Drop => {
-                                self.write_config();
+                                self.write_config()?;
                                 self.send_drop()?;
                                 break 'event_loop;
                             }
@@ -306,18 +323,20 @@ impl JujikController {
             })?)
     }
 
-    fn write_config(&mut self) {
+    fn write_config(&mut self) -> Result<(), JujikError> {
         self.config.tabs.iter_mut().for_each(|t| t.clear_entitys());
 
-        if let Err(_) = self.config.write() {
-            //TODO Handle error
+        if let Err(err) = self.config.write() {
+            self.view.send(Command::Error(Box::new(err)))?;
         }
+
+        Ok(())
     }
 
     fn update_tabs(&mut self) -> Result<(), JujikError> {
         for tab in &mut self.config.tabs {
             if let Err(err) = tab.update_entitys() {
-                //TODO Handle error
+                return Err(JujikError::Other(format!("{}", err)));
             }
         }
 

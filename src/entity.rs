@@ -54,11 +54,22 @@ impl Entity {
         })
     }
 
-    pub fn ghost(pathbuf: PathBuf, name: String, kind: EntityKind) -> Result<Self, JujikError> {
-        let extension = pathbuf
-            .extension()
-            .and_then(|n| n.to_str())
-            .and_then(|n| Some(n.to_string()));
+    pub fn ghost(pathbuf: PathBuf, name: String, extension: String) -> Result<Self, JujikError> {
+        let extension = if extension.eq("") || extension.eq("None") {
+            None
+        } else {
+            Some(extension)
+        };
+
+        let kind = if let Some(last_char) = name.chars().last() {
+            if last_char.eq(&'/') {
+                EntityKind::Directory
+            } else {
+                EntityKind::File
+            }
+        } else {
+            EntityKind::Unknown
+        };
 
         let permissions = EntityPermissions::new(match kind {
             EntityKind::File => 0o644,
@@ -74,8 +85,8 @@ impl Entity {
             permissions,
             owners: EntityOwners::current()?,
             size: EntitySize::default(),
-            modification: EntityDate::default(),
-            creation: EntityDate::default(),
+            modification: EntityDate::now(),
+            creation: EntityDate::now(),
         })
     }
 }
@@ -194,26 +205,6 @@ impl Entity {
 
         Ok(content)
     }
-
-    pub fn set_path(&mut self, path: PathBuf) {
-        self.global_path.clone_from(&PathBuf::from(path));
-    }
-
-    pub fn set_name(&mut self, name: String) {
-        self.name.clone_from(&name);
-    }
-
-    pub fn set_extension(&mut self, extension: String) {
-        if extension != "" || extension != "None" {
-            self.extension.clone_from(&Some(extension));
-        } else {
-            self.extension = None;
-        }
-    }
-
-    pub fn set_permissions(&mut self, permissions: EntityPermissions) {
-        self.permissions.clone_from(&permissions);
-    }
 }
 
 impl Entity {
@@ -234,8 +225,10 @@ impl Entity {
                 _ => "".to_string(),
             })
         } else {
-            //TODO Handle error
-            Err(JujikError::Other(format!("")))
+            Err(JujikError::Other(format!(
+                "Can ont get name from path:\n{:?}",
+                path
+            )))
         }
     }
 
@@ -243,7 +236,6 @@ impl Entity {
         if let Some(extension) = path.extension().and_then(|n| n.to_str()) {
             Ok(Some(extension.to_string()))
         } else {
-            //TODO Handle error
             Ok(None)
         }
     }

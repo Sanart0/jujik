@@ -43,7 +43,7 @@ mod entity_tests {
         let ghost_entity = Entity::ghost(
             ghost_path.clone(),
             "ghost_file".to_string(),
-            EntityKind::File,
+            "txt".to_string(),
         )
         .unwrap();
 
@@ -321,7 +321,7 @@ mod benchmarks {
         let (view_tx, _view_rx) = mpsc::channel();
 
         let model = JujikModel::new(controller_tx, model_rx);
-        let controller = JujikController::new(model_tx.clone(), view_tx, controller_rx);
+        let controller = JujikController::new(model_tx.clone(), view_tx, controller_rx).unwrap();
 
         let model_handle = model.run().unwrap();
         let controller_handle = controller.run().unwrap();
@@ -335,7 +335,7 @@ mod benchmarks {
                     let ghost_entity = Entity::ghost(
                         temp_path.join(format!("stress_file_{}.txt", i)),
                         format!("stress_file_{}", i),
-                        EntityKind::File,
+                        "txt".to_string(),
                     )
                     .unwrap();
 

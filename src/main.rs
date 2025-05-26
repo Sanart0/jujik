@@ -31,7 +31,7 @@ fn main() -> Result<(), JujikError> {
     let (model_tx, model_rx) = mpsc::channel::<Command>();
     let (view_tx, view_rx) = mpsc::channel::<Command>();
 
-    let controller = JujikController::new(model_tx, view_tx, controller_rx);
+    let controller = JujikController::new(model_tx, view_tx, controller_rx)?;
     let model = JujikModel::new(controller_tx.clone(), model_rx);
     let view = JujikView::new(controller_tx, view_rx);
 
